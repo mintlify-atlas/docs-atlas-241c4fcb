@@ -1,80 +1,358 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick start
+description: Get QeetMart running locally in 15 minutes with Docker, services, and frontend apps
 ---
 
-## Get started in three steps
+# Quick start
 
-Get your documentation site running locally and make your first customization.
+Get the entire QeetMart platform running on your local machine in about 15 minutes.
 
-### Step 1: Set up your local environment
+<Note>
+This guide will start all microservices, databases, and optionally the frontend applications.
+</Note>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+## Prerequisites
+
+Before starting, ensure you have these tools installed:
+
+- **Node.js** 22.x or later ([download](https://nodejs.org/))
+- **pnpm** 10.x or later (`npm install -g pnpm`)
+- **Java** 17 or later ([OpenJDK](https://openjdk.org/))
+- **Go** 1.23 or later ([download](https://go.dev/))
+- **Docker** with Docker Compose v2 ([download](https://docs.docker.com/get-docker/))
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/qeetgroup/qeetmart.git
+    cd qeetmart
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install all Node.js dependencies across the monorepo:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    pnpm install
+    ```
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    This installs dependencies for:
+    - API Gateway
+    - Web, Admin, and Mobile apps
+    - Shared packages
+    - Documentation platform
+  </Step>
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+  <Step title="Create environment files">
+    Copy example environment files for each service:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    cp micros/api-gateway/.env.example micros/api-gateway/.env
+    cp micros/auth-service/.env.example micros/auth-service/.env
+    cp micros/user-service/.env.example micros/user-service/.env
+    cp micros/product-service/.env.example micros/product-service/.env
+    cp micros/inventory-service/.env.example micros/inventory-service/.env
+    ```
+    
+    <Warning>
+    The example files contain development credentials. These are **NOT** suitable for production use.
+    </Warning>
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Start the backend stack">
+    Launch all services and databases with Docker Compose:
+    
+    ```bash
+    pnpm docker:up
+    ```
+    
+    This command:
+    - Builds Docker images for all services
+    - Starts PostgreSQL databases (auth_db, user_db, product_db, inventory)
+    - Starts Redis for inventory caching
+    - Launches API Gateway on port 4000
+    - Starts all microservices with health checks
+    
+    <Note>
+    First run takes 3-5 minutes to build images. Subsequent starts are much faster.
+    </Note>
+  </Step>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+  <Step title="Verify service health">
+    Check that all services are running correctly:
+    
+    ```bash
+    # Check API Gateway health
+    curl http://localhost:4000/health
+    
+    # Check all services status
+    curl http://localhost:4000/health/services
+    
+    # Check Inventory service directly
+    curl http://localhost:8080/health
+    ```
+    
+    Expected response from `/health`:
+    
+    ```json
+    {
+      "status": "ok",
+      "service": "api-gateway",
+      "timestamp": "2026-03-03T10:30:00.000Z"
+    }
+    ```
+  </Step>
 
-### Step 3: Go live
+  <Step title="Start frontend apps (optional)">
+    Run any of the frontend applications:
+    
+    <CodeGroup>
+    ```bash Web App (Next.js)
+    pnpm dev:web
+    # Opens at http://localhost:3000
+    ```
+    
+    ```bash Admin Panel (Vite)
+    pnpm dev:admin
+    # Opens at http://localhost:5173
+    ```
+    
+    ```bash Mobile App (Expo)
+    pnpm dev:mobile
+    # Follow Expo CLI instructions
+    ```
+    
+    ```bash Documentation
+    pnpm dev:docs
+    # Opens at http://localhost:3001
+    ```
+    </CodeGroup>
+    
+    Or run everything together:
+    
+    ```bash
+    # Runs gateway + web + admin in parallel
+    pnpm dev
+    ```
+  </Step>
+</Steps>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+## Service endpoints
+
+Once running, these endpoints are available:
+
+| Service | URL | Description |
+| --- | --- | --- |
+| API Gateway | http://localhost:4000 | Main entry point for all APIs |
+| Gateway Health | http://localhost:4000/health | Gateway health check |
+| Service Health | http://localhost:4000/health/services | All services status |
+| Gateway Info | http://localhost:4000/info | Service registry information |
+| Auth Service | http://localhost:4001 | Direct auth service access |
+| User Service | http://localhost:8082 | Direct user service access |
+| Product Service | http://localhost:8083 | Direct product service access |
+| Inventory Service | http://localhost:8080 | Direct inventory service access |
+| Web App | http://localhost:3000 | Customer-facing web application |
+| Admin Panel | http://localhost:5173 | Admin dashboard |
+
+## Understanding the API Gateway
+
+The API Gateway (micros/api-gateway/src/index.ts:1) handles:
+
+- **Request routing** - Proxies requests to appropriate microservices
+- **Authentication** - JWT validation for protected routes
+- **Rate limiting** - 1000 requests per minute per IP by default
+- **CORS** - Cross-origin request handling
+- **Error handling** - Unified error responses
+
+### Gateway route mapping
+
+API routes are mapped to services in micros/api-gateway/src/config/services.ts:55:
+
+```typescript
+[
+  { path: '/api/v1/auth', service: 'auth', upstreamPath: '/auth' },
+  { path: '/api/v1/users', service: 'users', upstreamPath: '/users' },
+  { path: '/api/v1/products', service: 'products', upstreamPath: '/products' },
+  { path: '/api/v1/inventory', service: 'inventory', upstreamPath: '/inventory' },
+]
+```
+
+## Docker Compose configuration
+
+The docker-compose.dev.yml file defines the complete stack:
+
+```yaml
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: micros/api-gateway/Dockerfile
+    environment:
+      PORT: "4000"
+      AUTH_SERVICE_URL: "http://auth-service:4001"
+      USER_SERVICE_URL: "http://user-service:8082"
+      PRODUCT_SERVICE_URL: "http://product-service:8083"
+      INVENTORY_SERVICE_URL: "http://inventory-service:8080"
+    ports:
+      - "4000:4000"
+    depends_on:
+      - auth-service
+      - user-service
+      - product-service
+      - inventory-service
+```
+
+## Common tasks
+
+### View logs
+
+```bash
+# All services
+docker compose -f docker-compose.dev.yml logs -f
+
+# Specific service
+docker compose -f docker-compose.dev.yml logs -f gateway
+docker compose -f docker-compose.dev.yml logs -f inventory-service
+```
+
+### Check running containers
+
+```bash
+docker compose -f docker-compose.dev.yml ps
+```
+
+### Restart a service
+
+```bash
+docker compose -f docker-compose.dev.yml restart gateway
+```
+
+### Stop the stack
+
+```bash
+# Stop and remove containers, networks, volumes
+pnpm docker:down
+
+# Or directly with docker compose
+docker compose -f docker-compose.dev.yml down -v
+```
+
+## Development workflows
+
+After initial setup, use these commands for daily development:
+
+<CodeGroup>
+```bash Build Commands
+# Build all apps
+pnpm build
+
+# Build specific apps
+pnpm build:gateway
+pnpm build:web
+pnpm build:admin
+pnpm build:docs
+```
+
+```bash Test Commands
+# Test API Gateway
+pnpm test:gateway
+
+# Test microservices
+pnpm test:auth-service
+pnpm test:user-service
+pnpm test:product-service
+pnpm test:inventory-service
+```
+
+```bash Contract Governance
+# Lint OpenAPI specs
+pnpm contracts:lint
+
+# Check for breaking changes
+pnpm contracts:breaking
+
+# Generate TypeScript clients
+pnpm docs:generate:clients
+```
+</CodeGroup>
+
+## Troubleshooting
+
+### Services won't start
+
+**Issue**: Docker containers fail to start
+
+**Solution**: Check if ports are already in use
+
+```bash
+# Check port usage
+lsof -i :4000  # API Gateway
+lsof -i :4001  # Auth Service
+lsof -i :8080  # Inventory Service
+lsof -i :8082  # User Service
+lsof -i :8083  # Product Service
+```
+
+### Database connection errors
+
+**Issue**: Services can't connect to PostgreSQL
+
+**Solution**: Wait for database health checks to pass
+
+```bash
+# Check database container status
+docker compose -f docker-compose.dev.yml ps auth-db
+
+# View database logs
+docker compose -f docker-compose.dev.yml logs auth-db
+```
+
+Databases have health checks configured (docker-compose.dev.yml:38):
+
+```yaml
+healthcheck:
+  test: ["CMD-SHELL", "pg_isready -U postgres -d auth_db"]
+  interval: 5s
+  timeout: 5s
+  retries: 20
+```
+
+### React 19 peer dependency warnings
+
+**Issue**: pnpm shows peer dependency warnings during install
+
+**Solution**: These are expected. The root package.json includes peerDependencyRules to handle packages that haven't updated to React 19 yet.
+
+### Build script approval warnings
+
+**Issue**: pnpm warns about unapproved build scripts
+
+**Solution**: Run the interactive approval tool:
+
+```bash
+pnpm approve-builds
+```
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Explore the architecture" icon="sitemap" href="/architecture">
+    Understand how services communicate and data flows through the system
+  </Card>
+  
+  <Card title="API documentation">
+    Browse the API reference to start building integrations
+  </Card>
+  
+  <Card title="Configuration guide">
+    Learn about environment variables and service configuration
+  </Card>
+  
+  <Card title="Deployment">
+    Deploy QeetMart to Kubernetes using the provided manifests and Helm charts
+  </Card>
 </CardGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+All default credentials are set to `postgres`/`postgres` for local development. **Always** rotate these for any non-local environment.
 </Note>

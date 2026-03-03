@@ -1,0 +1,655 @@
+---
+title: Data persistence
+description: Database architecture, data models, and persistence patterns across QeetMart microservices
+---
+
+QeetMart implements the **Database per Service** pattern, where each microservice owns and manages its own database. This ensures loose coupling, independent deployability, and technology diversity.
+
+## Database architecture
+
+### Service databases
+
+Each service has its own PostgreSQL database instance:
+
+<Tabs>
+  <Tab title="auth_db">
+    **Service**: Auth Service
+    
+    **Technology**: PostgreSQL 16
+    
+    **Port**: `5001` (local) / `5432` (Docker)
+    
+    **Tables**:
+    - `user_credentials` - User authentication data
+    - `refresh_tokens` - Active refresh tokens
+    - `audit_logs` - Authentication events
+    
+    **Configuration**:
+    ```bash
+    DB_HOST=localhost
+    DB_PORT=5001
+    DB_NAME=qeetmart_auth
+    DB_USERNAME=postgres
+    DB_PASSWORD=password
+    ```
+  </Tab>
+  
+  <Tab title="user_db">
+    **Service**: User Service
+    
+    **Technology**: PostgreSQL 16
+    
+    **Port**: `5432` (Docker)
+    
+    **Tables**:
+    - `user_profiles` - User profile information
+    - `addresses` - User addresses for shipping/billing
+    
+    **Configuration**:
+    ```bash
+    DB_HOST=localhost
+    DB_PORT=5432
+    DB_NAME=user_db
+    DB_USERNAME=postgres
+    DB_PASSWORD=postgres
+    ```
+  </Tab>
+  
+  <Tab title="product_db">
+    **Service**: Product Service
+    
+    **Technology**: PostgreSQL 16
+    
+    **Port**: `5432` (Docker)
+    
+    **Tables**:
+    - `products` - Product catalog
+    - `categories` - Product categories
+    - `product_variants` - Size, color, and other variants
+    
+    **Configuration**:
+    ```bash
+    DB_HOST=localhost
+    DB_PORT=5432
+    DB_NAME=product_db
+    DB_USERNAME=postgres
+    DB_PASSWORD=postgres
+    ```
+  </Tab>
+  
+  <Tab title="inventory">
+    **Service**: Inventory Service
+    
+    **Technology**: PostgreSQL 16 + Redis 7.2
+    
+    **Port**: `5432` (PostgreSQL), `6379` (Redis)
+    
+    **Tables**:
+    - `inventory_stock` - Available and reserved quantities
+    - `inventory_reservations` - Stock reservations with TTL
+    
+    **Configuration**:
+    ```bash
+    DATABASE_URL=postgres://postgres:postgres@localhost:5432/inventory
+    REDIS_ADDR=localhost:6379
+    REDIS_DB=0
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  There is **no shared database** across services. If Service A needs data from Service B, it must call Service B's API. This prevents coupling and maintains service autonomy.
+</Note>
+
+## ORM and persistence frameworks
+
+### Spring Data JPA (Java services)
+
+Auth, User, and Product services use **Spring Data JPA** with Hibernate:
+
+```java
+@Entity
+@Table(name = "products")
+public class Product extends BaseAuditEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, length = 150)
+    private String name;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "category_id", nullable = false)
+    private Category category;
+
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal price;
+    
+    // ...
+}
+```
+
+From `micros/product-service/src/main/java/com/qeetmart/product/entity/Product.java:32`
+
+**Schema management**: Configured via `JPA_DDL_AUTO`
+- `update` - Auto-update schema (development)
+- `validate` - Validate schema only (production recommended)
+
+### pgx (Go service)
+
+Inventory service uses **pgx** (PostgreSQL driver for Go) with raw SQL:
+
+```go
+func (r *InventoryRepository) GetStockForUpdate(
+    ctx context.Context, 
+    tx pgx.Tx, 
+    productID string
+) (*models.InventoryStock, error) {
+    query := `
+        SELECT product_id, available_quantity, reserved_quantity, 
+               created_at, updated_at
+        FROM inventory_stock
+        WHERE product_id = $1
+        FOR UPDATE`
+
+    stock := &models.InventoryStock{}
+    err := tx.QueryRow(ctx, query, productID).Scan(
+        &stock.ProductID,
+        &stock.AvailableQuantity,
+        &stock.ReservedQuantity,
+        &stock.CreatedAt,
+        &stock.UpdatedAt,
+    )
+    return stock, err
+}
+```
+
+From `micros/inventory-service/internal/repository/inventory_repository.go:63`
+
+<Accordion title="Why raw SQL instead of an ORM?">
+  The inventory service uses raw SQL with pgx for several reasons:
+  1. **Performance**: Direct SQL with `SELECT ... FOR UPDATE` for row-level locking
+  2. **Simplicity**: Simple domain model doesn't benefit from ORM complexity
+  3. **Control**: Explicit transaction management for critical stock operations
+  4. **Go ecosystem**: pgx is the most performant PostgreSQL driver for Go
+</Accordion>
+
+## Data models
+
+### Auth Service models
+
+#### UserCredential
+
+```java
+@Entity
+@Table(name = "user_credentials")
+public class UserCredential {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, unique = true)
+    private String email;
+
+    @Column(name = "password_hash", nullable = false)
+    private String passwordHash;
+
+    @Enumerated(EnumType.STRING)
+    private Role role;  // CUSTOMER, ADMIN, STAFF
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "account_status")
+    private AccountStatus accountStatus;  // ACTIVE, LOCKED, SUSPENDED
+
+    @Column(name = "email_verified")
+    private boolean emailVerified;
+
+    @Column(name = "failed_login_attempts")
+    private int failedLoginAttempts;
+
+    @Column(name = "lock_until")
+    private Instant lockUntil;
+
+    @Column(name = "last_login_at")
+    private Instant lastLoginAt;
+
+    @Column(name = "created_at", updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "updated_at")
+    private Instant updatedAt;
+}
+```
+
+From `micros/auth-service/src/main/java/com/qeetmart/auth/domain/entity/UserCredential.java:32`
+
+### User Service models
+
+#### UserProfile
+
+```java
+@Entity
+@Table(name = "user_profiles")
+public class UserProfile {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "user_id", nullable = false, unique = true)
+    private Long userId;  // References UserCredential.id from auth service
+
+    @Column(nullable = false, length = 120)
+    private String name;
+
+    @Column(nullable = false, length = 255)
+    private String email;
+
+    @Column(length = 20)
+    private String phone;
+
+    @Column(name = "created_at", updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "updated_at")
+    private Instant updatedAt;
+}
+```
+
+From `micros/user-service/src/main/java/com/qeetmart/user/domain/entity/UserProfile.java:29`
+
+<Warning>
+  **Important**: `UserProfile.userId` is NOT a foreign key. It references `UserCredential.id` from a different database. Services use the user ID from JWT claims to associate data across services.
+</Warning>
+
+### Product Service models
+
+#### Product
+
+```java
+@Entity
+@Table(name = "products")
+public class Product extends BaseAuditEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, length = 150)
+    private String name;
+
+    @Column(length = 1000)
+    private String description;
+
+    @Column(nullable = false)
+    private String brand;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "category_id")
+    private Category category;
+
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal price;
+
+    @Column(nullable = false, length = 3)
+    private String currency;
+
+    @Enumerated(EnumType.STRING)
+    private ProductStatus status;  // ACTIVE, DRAFT, DISCONTINUED
+
+    @Column(name = "is_deleted")
+    private boolean isDeleted;
+
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL)
+    private List<ProductVariant> variants = new ArrayList<>();
+}
+```
+
+From `micros/product-service/src/main/java/com/qeetmart/product/entity/Product.java:32`
+
+#### Category
+
+```java
+@Entity
+@Table(name = "categories")
+public class Category extends BaseAuditEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, unique = true, length = 100)
+    private String name;
+
+    @Column(length = 500)
+    private String description;
+
+    @OneToMany(mappedBy = "category", cascade = CascadeType.ALL)
+    private List<Product> products = new ArrayList<>();
+}
+```
+
+From `micros/product-service/src/main/java/com/qeetmart/product/entity/Category.java:26`
+
+### Inventory Service models
+
+#### InventoryStock
+
+```go
+type InventoryStock struct {
+    ProductID         string    `json:"productId"`
+    AvailableQuantity int       `json:"availableQuantity"`
+    ReservedQuantity  int       `json:"reservedQuantity"`
+    CreatedAt         time.Time `json:"createdAt"`
+    UpdatedAt         time.Time `json:"updatedAt"`
+}
+```
+
+**Database schema**:
+```sql
+CREATE TABLE inventory_stock (
+    product_id VARCHAR PRIMARY KEY,
+    available_quantity INT NOT NULL DEFAULT 0 CHECK (available_quantity >= 0),
+    reserved_quantity INT NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+```
+
+From `micros/inventory-service/migrations/001_init.sql:1`
+
+#### InventoryReservation
+
+```go
+type InventoryReservation struct {
+    ReservationID string            `json:"reservationId"`
+    ProductID     string            `json:"productId"`
+    OrderID       string            `json:"orderId"`
+    Quantity      int               `json:"quantity"`
+    Status        ReservationStatus `json:"status"` // RESERVED, RELEASED, DEDUCTED
+    ExpiresAt     time.Time         `json:"expiresAt"`
+    CreatedAt     time.Time         `json:"createdAt"`
+}
+```
+
+**Database schema**:
+```sql
+CREATE TABLE inventory_reservations (
+    reservation_id UUID PRIMARY KEY,
+    product_id VARCHAR NOT NULL REFERENCES inventory_stock(product_id),
+    order_id VARCHAR NOT NULL,
+    quantity INT NOT NULL CHECK (quantity > 0),
+    status VARCHAR NOT NULL CHECK (status IN ('RESERVED', 'RELEASED', 'DEDUCTED')),
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_inventory_reservations_status_expires_at
+    ON inventory_reservations(status, expires_at);
+```
+
+From `micros/inventory-service/migrations/001_init.sql:9`
+
+From `micros/inventory-service/internal/models/inventory.go:5`
+
+## Persistence patterns
+
+### Auditing (JPA entities)
+
+Java services use JPA lifecycle callbacks for automatic timestamp management:
+
+```java
+@PrePersist
+public void onCreate() {
+    Instant now = Instant.now();
+    this.createdAt = now;
+    this.updatedAt = now;
+}
+
+@PreUpdate
+public void onUpdate() {
+    this.updatedAt = Instant.now();
+}
+```
+
+Product and Category entities extend `BaseAuditEntity` which provides:
+- `createdAt` - Automatically set on insert
+- `updatedAt` - Automatically updated on every change
+
+### Optimistic locking (row-level locks)
+
+The inventory service uses `SELECT ... FOR UPDATE` for pessimistic locking during stock operations:
+
+```go
+query := `
+    SELECT product_id, available_quantity, reserved_quantity, 
+           created_at, updated_at
+    FROM inventory_stock
+    WHERE product_id = $1
+    FOR UPDATE`
+```
+
+This prevents race conditions when multiple requests attempt to reserve the same product simultaneously.
+
+<Info>
+  **Why pessimistic locking?** Inventory operations are highly contentious during flash sales or limited stock scenarios. Pessimistic locks prevent overselling by ensuring only one transaction can modify stock at a time.
+</Info>
+
+### Transaction management
+
+#### JPA transactions (Java services)
+
+```java
+@Service
+public class ProductService {
+    @Transactional
+    public Product createProduct(CreateProductRequest request) {
+        // All operations within this method execute in a single transaction
+        Category category = categoryRepository.findById(request.getCategoryId())
+            .orElseThrow(() -> new NotFoundException("Category not found"));
+        
+        Product product = Product.builder()
+            .name(request.getName())
+            .category(category)
+            .price(request.getPrice())
+            .build();
+        
+        return productRepository.save(product);
+    }
+}
+```
+
+#### Manual transactions (Go service)
+
+```go
+func (s *InventoryService) ReserveStock(
+    ctx context.Context, 
+    productID, orderID string, 
+    quantity int
+) (*models.InventoryReservation, error) {
+    tx, err := s.repo.BeginTx(ctx)
+    if err != nil {
+        return nil, err
+    }
+    defer tx.Rollback(ctx)
+
+    // Lock the row
+    stock, err := s.repo.GetStockForUpdate(ctx, tx, productID)
+    if err != nil {
+        return nil, err
+    }
+
+    // Check availability
+    if stock.AvailableQuantity < quantity {
+        return nil, errors.New("insufficient stock")
+    }
+
+    // Update stock
+    stock.AvailableQuantity -= quantity
+    stock.ReservedQuantity += quantity
+    err = s.repo.UpdateStock(ctx, tx, productID, 
+        stock.AvailableQuantity, stock.ReservedQuantity)
+    if err != nil {
+        return nil, err
+    }
+
+    // Insert reservation
+    reservation := &models.InventoryReservation{
+        ReservationID: uuid.New().String(),
+        ProductID:     productID,
+        OrderID:       orderID,
+        Quantity:      quantity,
+        Status:        models.ReservationStatusReserved,
+        ExpiresAt:     time.Now().Add(s.reservationTTL),
+    }
+    err = s.repo.InsertReservation(ctx, tx, reservation)
+    if err != nil {
+        return nil, err
+    }
+
+    // Commit transaction
+    if err = tx.Commit(ctx); err != nil {
+        return nil, err
+    }
+
+    return reservation, nil
+}
+```
+
+The explicit transaction ensures all operations (lock, check, update, insert) succeed or fail together.
+
+## Redis caching (Inventory Service)
+
+The inventory service uses Redis for reservation data caching with TTL:
+
+```bash
+REDIS_ADDR=localhost:6379
+REDIS_DB=0
+RESERVATION_TTL=10m
+```
+
+**Cache strategy**:
+1. Reservation created → Store in PostgreSQL + cache in Redis with TTL
+2. Reservation expires → Background worker polls Redis/DB and releases stock
+3. Reservation deducted → Remove from cache, mark as DEDUCTED in DB
+
+<Accordion title="Why PostgreSQL + Redis?">
+  **PostgreSQL** serves as the source of truth for all inventory data. It provides:
+  - ACID transactions
+  - Row-level locking
+  - Persistent storage
+  
+  **Redis** provides:
+  - Fast TTL-based expiration
+  - Reduced database load for temporary reservations
+  - Quick lookups for reservation status
+  
+  This hybrid approach combines reliability (PostgreSQL) with performance (Redis).
+</Accordion>
+
+### Background expiration worker
+
+The inventory service runs a background goroutine that polls for expired reservations:
+
+```bash
+EXPIRATION_POLL_INTERVAL=30s
+```
+
+Every 30 seconds, the worker:
+1. Queries for reservations with `status = RESERVED` and `expires_at <= NOW()`
+2. Releases the reserved stock back to available quantity
+3. Updates reservation status to `RELEASED`
+
+## Schema migrations
+
+### Spring Boot (Java services)
+
+Java services use JPA auto-DDL during development:
+
+```bash
+JPA_DDL_AUTO=update  # Development
+JPA_DDL_AUTO=validate  # Production (recommended)
+```
+
+<Warning>
+  In production, use `JPA_DDL_AUTO=validate` and manage schema migrations with Flyway or Liquibase. Auto-DDL is convenient for development but risky in production.
+</Warning>
+
+### Go service (Inventory)
+
+The inventory service runs migrations from SQL files on startup:
+
+```go
+func (r *InventoryRepository) RunMigrations(
+    ctx context.Context, 
+    migrationsDir string
+) error {
+    entries, err := os.ReadDir(migrationsDir)
+    if err != nil {
+        return err
+    }
+
+    sort.Slice(entries, func(i, j int) bool {
+        return entries[i].Name() < entries[j].Name()
+    })
+
+    for _, entry := range entries {
+        if filepath.Ext(entry.Name()) != ".sql" {
+            continue
+        }
+
+        content, _ := os.ReadFile(filepath.Join(migrationsDir, entry.Name()))
+        _, execErr := r.pool.Exec(ctx, string(content))
+        if execErr != nil {
+            return execErr
+        }
+    }
+    return nil
+}
+```
+
+Migrations are stored in `micros/inventory-service/migrations/` and executed in alphabetical order.
+
+## Data consistency across services
+
+<Note>
+  **Key principle**: There are no distributed transactions across services. Each service maintains its own data consistency using local transactions.
+</Note>
+
+### Eventually consistent data
+
+When a user registers:
+1. **Auth Service** creates `UserCredential` (ID: 123)
+2. **Auth Service** calls User Service API to create `UserProfile` with `userId=123`
+3. If User Service call fails, the user has credentials but no profile (recoverable)
+
+**Handling failures**:
+- Retry with exponential backoff
+- Dead letter queues for failed events (future enhancement)
+- Manual reconciliation tools for administrators
+
+### ID propagation
+
+Services use user IDs from JWT claims to associate data:
+
+```typescript
+// Gateway extracts and forwards JWT
+if (req.token) {
+  proxyReq.setHeader('authorization', `Bearer ${req.token}`);
+}
+```
+
+```java
+// Downstream service extracts user ID from token
+Long userId = accessTokenService.extractUserId(token);
+```
+
+This allows services to associate data without direct database access.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Microservices" icon="cubes" href="/concepts/microservices">
+    Understand service boundaries and communication
+  </Card>
+  <Card title="Authentication" icon="lock" href="/concepts/authentication">
+    Learn how user IDs are propagated via JWT
+  </Card>
+</CardGroup>

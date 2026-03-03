@@ -1,0 +1,225 @@
+---
+title: Web storefront
+description: Enterprise-grade Next.js commerce storefront with personalization, A/B testing, and PWA capabilities
+---
+
+The QeetMart web storefront is an enterprise-grade e-commerce application built with Next.js 16, featuring advanced personalization, conversion optimization, and comprehensive analytics.
+
+## Technology stack
+
+The web application leverages modern web technologies for optimal performance and developer experience:
+
+- **Next.js 16** with App Router and React Server Components
+- **React 19** with React Compiler enabled
+- **TypeScript** for type safety
+- **Tailwind CSS v4** for utility-first styling
+- **TanStack Query** for server state management
+- **Zustand** for client state (cart, session, wishlist)
+- **Radix UI** for accessible component primitives
+- **Zod** for runtime validation
+
+## Key features
+
+### Commerce capabilities
+
+The storefront includes complete e-commerce functionality:
+
+- Product listing and detail pages with rich merchandising
+- Shopping cart with real-time updates
+- Multi-step checkout flow
+- User authentication and account management
+- Order history and tracking
+- Wishlist functionality
+- Search with autocomplete
+
+### Personalization engine
+
+Advanced personalization based on user behavior:
+
+- Interaction profile tracking (views, category affinity, cart adds)
+- Weighted recommendation scoring and blending
+- Personalized home page recommendations
+- Personalized product list sorting
+
+### A/B testing framework
+
+Built-in experimentation capabilities:
+
+- Feature flags with weighted bucket assignment
+- Persistent variant assignment
+- Exposure tracking events
+- Active experiments for homepage hero, pricing, and CTAs
+
+### Conversion optimization
+
+Multiple strategies to improve conversion rates:
+
+- Exit intent recovery modals
+- Stock urgency indicators with countdown timers
+- Recently viewed products section
+- Cross-sell and upsell recommendations
+- Free shipping progress indicator
+
+### Performance optimization
+
+Enterprise-grade performance features:
+
+- Cached catalog and product data with `unstable_cache`
+- Incremental Static Regeneration (ISR) for product pages
+- Suspense-based section loading
+- Prefetch-on-hover for product cards
+- Bundle analyzer integration
+
+### PWA support
+
+Progressive Web App capabilities:
+
+- Service worker with offline caching
+- Web app manifest
+- Add-to-home-screen prompt
+- Mobile swipe gestures in product gallery
+
+### Analytics
+
+Comprehensive event tracking:
+
+- Page views, product clicks, add-to-cart events
+- Checkout step tracking and conversions
+- Experiment exposure tracking
+- Debug panel (open with `Shift + A`)
+
+### SEO optimization
+
+Search engine optimization features:
+
+- Product and breadcrumb JSON-LD
+- Dynamic metadata and canonical links
+- Robots.txt configuration
+- Dynamic sitemap generation
+
+## Project structure
+
+The application follows a domain-driven architecture:
+
+```
+src/
+├── app/              # Next.js App Router pages
+│   ├── account/      # User account pages
+│   ├── auth/         # Authentication flows
+│   ├── cart/         # Shopping cart
+│   ├── checkout/     # Checkout flow
+│   ├── orders/       # Order history
+│   ├── products/     # Product pages
+│   └── wishlist/     # Wishlist management
+├── components/       # React components
+│   ├── analytics/    # Analytics components
+│   ├── auth/         # Auth UI components
+│   ├── cart/         # Cart components
+│   ├── checkout/     # Checkout components
+│   ├── layout/       # Layout components
+│   ├── product/      # Product components
+│   └── ui/           # Base UI components
+├── domains/          # Domain logic modules
+│   ├── analytics/    # Analytics domain
+│   ├── catalog/      # Product catalog
+│   └── personalization/ # Personalization
+├── lib/              # Utilities and APIs
+│   ├── api/          # API client
+│   ├── analytics/    # Analytics utilities
+│   ├── experiments/  # A/B testing
+│   ├── personalization/ # Personalization logic
+│   └── search/       # Search engine
+├── hooks/            # Custom React hooks
+├── store/            # Zustand stores
+└── types/            # TypeScript definitions
+```
+
+## Getting started
+
+<Steps>
+  <Step title="Install dependencies">
+    From the repository root:
+
+    ```bash
+    pnpm install
+    ```
+  </Step>
+
+  <Step title="Configure environment">
+    Copy the example environment file:
+
+    ```bash
+    cp apps/web/.env.example apps/web/.env.local
+    ```
+
+    Update the authentication API URL if needed:
+
+    ```bash
+    NEXT_PUBLIC_AUTH_API_BASE_URL=http://localhost:4000/api/v1/auth
+    ```
+  </Step>
+
+  <Step title="Start development server">
+    Run the development server:
+
+    ```bash
+    pnpm --filter web dev
+    ```
+
+    The application will be available at `http://localhost:3000`.
+  </Step>
+</Steps>
+
+## Available scripts
+
+<CodeGroup>
+```bash Development
+pnpm --filter web dev
+```
+
+```bash Build
+pnpm --filter web build
+```
+
+```bash Production
+pnpm --filter web start
+```
+
+```bash Lint
+pnpm --filter web lint
+```
+
+```bash Bundle analysis
+ANALYZE=true pnpm --filter web build
+```
+</CodeGroup>
+
+## Demo credentials
+
+For testing authentication flows:
+
+- **Email**: `demo@qeetmart.com`
+- **Password**: `demo123`
+
+## Configuration
+
+### Next.js configuration
+
+The application is configured in `next.config.ts`:
+
+- React Compiler enabled for automatic optimization
+- Standalone output for containerized deployments
+- Remote image patterns for product images
+- Bundle analyzer integration
+
+### PWA configuration
+
+<Note>
+The service worker is located at `public/sw.js` and the manifest at `public/manifest.webmanifest`. The install prompt appears when the browser emits the `beforeinstallprompt` event.
+</Note>
+
+## Important notes
+
+- The mock database is in-memory and resets on server restart
+- Personalization profiles, analytics, and cart data persist in browser localStorage
+- The API Gateway runs on port 4000 and forwards auth requests to the auth service on port 4001

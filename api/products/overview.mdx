@@ -1,0 +1,143 @@
+---
+title: Products API overview
+description: Manage products in the QeetMart catalog with comprehensive CRUD operations and search capabilities
+---
+
+The Products API provides endpoints for managing products in the QeetMart catalog. This service handles product creation, updates, retrieval, deletion, and search functionality with support for filtering and pagination.
+
+## Base URL
+
+```
+http://localhost:8083
+```
+
+## Authentication
+
+Most Product API endpoints require authentication using JWT bearer tokens. Admin-specific operations (create, update, delete) require the `ADMIN` role.
+
+<CodeGroup>
+```bash Example authenticated request
+curl -X GET "http://localhost:8083/products/123" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+</CodeGroup>
+
+## Key features
+
+### Product management
+
+Create and manage products with detailed information including:
+- Product name and description
+- Brand information
+- Category association
+- Pricing with multi-currency support
+- Status tracking (ACTIVE, INACTIVE, OUT_OF_STOCK, DISCONTINUED)
+- Soft delete functionality
+
+### Filtering and search
+
+Query products using multiple criteria:
+- Filter by category ID
+- Filter by brand name
+- Filter by product status
+- Search by product name or brand
+- Pagination support for large result sets
+
+### Product status values
+
+Products can have one of the following statuses:
+
+- `ACTIVE` - Product is available for purchase
+- `INACTIVE` - Product is temporarily unavailable
+- `OUT_OF_STOCK` - Product is currently out of stock
+- `DISCONTINUED` - Product is no longer available
+
+## Response format
+
+All API responses follow a consistent structure:
+
+### Success response
+
+<CodeGroup>
+```json Single product response
+{
+  "id": 123,
+  "name": "Premium Wireless Headphones",
+  "description": "High-quality noise-canceling headphones",
+  "brand": "AudioTech",
+  "categoryId": 5,
+  "price": 199.99,
+  "currency": "USD",
+  "status": "ACTIVE",
+  "createdAt": "2026-01-15T10:30:00Z",
+  "updatedAt": "2026-02-01T14:20:00Z",
+  "deleted": false
+}
+```
+
+```json Paginated response
+{
+  "content": [
+    {
+      "id": 123,
+      "name": "Premium Wireless Headphones",
+      "brand": "AudioTech",
+      "categoryId": 5,
+      "price": 199.99,
+      "currency": "USD",
+      "status": "ACTIVE"
+    }
+  ],
+  "page": 0,
+  "size": 10,
+  "totalElements": 45,
+  "totalPages": 5,
+  "last": false
+}
+```
+</CodeGroup>
+
+### Error response
+
+<CodeGroup>
+```json Error response
+{
+  "timestamp": "2026-03-03T12:45:30Z",
+  "status": 404,
+  "error": "Not Found",
+  "message": "Product not found with id: 999",
+  "path": "/products/999"
+}
+```
+
+```json Validation error response
+{
+  "timestamp": "2026-03-03T12:45:30Z",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Validation failed",
+  "path": "/products",
+  "validationErrors": {
+    "name": "Product name is required",
+    "price": "Price must be non-negative",
+    "currency": "Currency must be an ISO 3-letter uppercase code"
+  }
+}
+```
+</CodeGroup>
+
+## Common HTTP status codes
+
+- `200 OK` - Request successful
+- `201 Created` - Product created successfully
+- `400 Bad Request` - Invalid request parameters or validation errors
+- `401 Unauthorized` - Missing or invalid authentication token
+- `403 Forbidden` - Insufficient permissions (admin role required)
+- `404 Not Found` - Product not found
+- `500 Internal Server Error` - Server-side error
+
+## Next steps
+
+<Card title="View endpoint documentation" icon="book" href="/api/products/endpoints">
+  Explore detailed documentation for all Products API endpoints
+</Card>

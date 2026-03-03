@@ -1,0 +1,403 @@
+---
+title: Inventory service
+description: Go-based inventory management service with Redis caching
+---
+
+The Inventory service manages product stock levels, reservations, and inventory tracking for QeetMart. Built with Go and the Gin framework, it provides high-performance inventory operations with Redis caching.
+
+## Overview
+
+The service handles inventory initialization, stock adjustments, reservations for orders, and automatic reservation expiration. It uses PostgreSQL for persistent storage and Redis for caching and reservation TTL management.
+
+<Note>
+The Inventory service runs on port **8080** by default and requires both PostgreSQL and Redis.
+</Note>
+
+## Technology stack
+
+- **Language**: Go 1.23
+- **Framework**: Gin 1.10.0
+- **Database**: PostgreSQL (pgx/v5)
+- **Cache**: Redis (go-redis/v9)
+- **Key packages**:
+  - `github.com/gin-gonic/gin` - HTTP framework
+  - `github.com/jackc/pgx/v5` - PostgreSQL driver
+  - `github.com/redis/go-redis/v9` - Redis client
+  - `github.com/google/uuid` - UUID generation
+
+## Configuration
+
+### Environment variables
+
+<ParamField path="PORT" type="string" default="8080">
+  Server port
+</ParamField>
+
+<ParamField path="GIN_MODE" type="string" default="release">
+  Gin mode (debug, release)
+</ParamField>
+
+### Database configuration
+
+<ParamField path="DATABASE_URL" type="string" required>
+  PostgreSQL connection string
+  
+  Example: `postgres://postgres:postgres@localhost:5432/inventory?sslmode=disable`
+</ParamField>
+
+### Redis configuration
+
+<ParamField path="REDIS_ADDR" type="string" default="localhost:6379">
+  Redis server address
+</ParamField>
+
+<ParamField path="REDIS_PASSWORD" type="string" default="">
+  Redis password (if required)
+</ParamField>
+
+<ParamField path="REDIS_DB" type="number" default="0">
+  Redis database number
+</ParamField>
+
+### Reservation configuration
+
+<ParamField path="RESERVATION_TTL" type="duration" default="10m">
+  Reservation time-to-live (e.g., 10m, 1h)
+</ParamField>
+
+<ParamField path="EXPIRATION_POLL_INTERVAL" type="duration" default="30s">
+  How often to check for expired reservations
+</ParamField>
+
+## API endpoints
+
+### Health check
+
+<CodeGroup>
+```bash GET /health
+curl http://localhost:8080/health
+```
+
+```json Response
+{
+  "success": true,
+  "message": "service is healthy",
+  "data": {
+    "status": "ok"
+  }
+}
+```
+</CodeGroup>
+
+### Initialize inventory
+
+<CodeGroup>
+```bash POST /inventory/init
+curl -X POST http://localhost:8080/inventory/init \
+  -H "Content-Type: application/json" \
+  -d '{
+    "productId": "prod-123",
+    "quantity": 100
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "message": "inventory initialized",
+  "data": {
+    "productId": "prod-123",
+    "availableQuantity": 100,
+    "reservedQuantity": 0,
+    "createdAt": "2026-03-03T10:00:00Z",
+    "updatedAt": "2026-03-03T10:00:00Z"
+  }
+}
+```
+</CodeGroup>
+
+### Get inventory
+
+<CodeGroup>
+```bash GET /inventory/{productId}
+curl http://localhost:8080/inventory/prod-123
+```
+
+```json Response
+{
+  "success": true,
+  "message": "inventory fetched",
+  "data": {
+    "productId": "prod-123",
+    "availableQuantity": 95,
+    "reservedQuantity": 5,
+    "createdAt": "2026-03-03T10:00:00Z",
+    "updatedAt": "2026-03-03T10:30:00Z"
+  }
+}
+```
+</CodeGroup>
+
+### Add stock
+
+<CodeGroup>
+```bash POST /inventory/add-stock
+curl -X POST http://localhost:8080/inventory/add-stock \
+  -H "Content-Type: application/json" \
+  -d '{
+    "productId": "prod-123",
+    "quantity": 50
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "message": "stock added",
+  "data": {
+    "productId": "prod-123",
+    "availableQuantity": 145,
+    "reservedQuantity": 5,
+    "updatedAt": "2026-03-03T10:35:00Z"
+  }
+}
+```
+</CodeGroup>
+
+### Reserve stock
+
+<CodeGroup>
+```bash POST /inventory/reserve
+curl -X POST http://localhost:8080/inventory/reserve \
+  -H "Content-Type: application/json" \
+  -d '{
+    "productId": "prod-123",
+    "orderId": "order-456",
+    "quantity": 3
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "message": "stock reserved",
+  "data": {
+    "reservationId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "productId": "prod-123",
+    "orderId": "order-456",
+    "quantity": 3,
+    "status": "RESERVED",
+    "expiresAt": "2026-03-03T10:45:00Z",
+    "createdAt": "2026-03-03T10:35:00Z"
+  }
+}
+```
+</CodeGroup>
+
+<Note>
+Reservations automatically expire after the configured `RESERVATION_TTL` and return stock to available inventory.
+</Note>
+
+### Release reservation
+
+<CodeGroup>
+```bash POST /inventory/release
+curl -X POST http://localhost:8080/inventory/release \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reservationId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "message": "reservation released",
+  "data": {
+    "reservationId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "productId": "prod-123",
+    "orderId": "order-456",
+    "quantity": 3,
+    "status": "RELEASED",
+    "createdAt": "2026-03-03T10:35:00Z"
+  }
+}
+```
+</CodeGroup>
+
+### Deduct reservation
+
+<CodeGroup>
+```bash POST /inventory/deduct
+curl -X POST http://localhost:8080/inventory/deduct \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reservationId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "message": "reservation deducted",
+  "data": {
+    "reservationId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "productId": "prod-123",
+    "orderId": "order-456",
+    "quantity": 3,
+    "status": "DEDUCTED",
+    "createdAt": "2026-03-03T10:35:00Z"
+  }
+}
+```
+</CodeGroup>
+
+<Note>
+Deducting a reservation permanently removes the quantity from inventory when an order is confirmed.
+</Note>
+
+## Data models
+
+### InventoryStock
+
+<CodeGroup>
+```go InventoryStock
+type InventoryStock struct {
+    ProductID         string    `json:"productId"`
+    AvailableQuantity int       `json:"availableQuantity"`
+    ReservedQuantity  int       `json:"reservedQuantity"`
+    CreatedAt         time.Time `json:"createdAt"`
+    UpdatedAt         time.Time `json:"updatedAt"`
+}
+```
+</CodeGroup>
+
+### InventoryReservation
+
+<CodeGroup>
+```go InventoryReservation
+type ReservationStatus string
+
+const (
+    ReservationStatusReserved ReservationStatus = "RESERVED"
+    ReservationStatusReleased ReservationStatus = "RELEASED"
+    ReservationStatusDeducted ReservationStatus = "DEDUCTED"
+)
+
+type InventoryReservation struct {
+    ReservationID string            `json:"reservationId"`
+    ProductID     string            `json:"productId"`
+    OrderID       string            `json:"orderId"`
+    Quantity      int               `json:"quantity"`
+    Status        ReservationStatus `json:"status"`
+    ExpiresAt     time.Time         `json:"expiresAt"`
+    CreatedAt     time.Time         `json:"createdAt"`
+}
+```
+</CodeGroup>
+
+## Reservation workflow
+
+1. **Reserve**: Create a reservation when a user adds items to cart/starts checkout
+2. **Deduct**: Finalize the reservation when payment is confirmed
+3. **Release**: Cancel the reservation if the user abandons the cart or payment fails
+4. **Auto-expire**: System automatically releases reservations after TTL expires
+
+## Error responses
+
+<CodeGroup>
+```json Validation error
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "productId is required"
+  }
+}
+```
+
+```json Insufficient stock
+{
+  "success": false,
+  "error": {
+    "code": "INSUFFICIENT_STOCK",
+    "message": "not enough available stock"
+  }
+}
+```
+
+```json Not found
+{
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "inventory not found for product"
+  }
+}
+```
+</CodeGroup>
+
+## Running the service
+
+<CodeGroup>
+```bash Development
+cd inventory-service
+go run cmd/main.go
+```
+
+```bash Production
+go build -o inventory-service cmd/main.go
+./inventory-service
+```
+
+```bash Docker
+docker build -t inventory-service .
+docker run -p 8080:8080 --env-file .env inventory-service
+```
+</CodeGroup>
+
+## Database migrations
+
+The service automatically runs migrations on startup from the `migrations/` directory.
+
+<Warning>
+Ensure PostgreSQL and Redis are running before starting the service. The service will exit if it cannot connect to either dependency.
+</Warning>
+
+## Background workers
+
+The service runs a background worker that periodically checks for expired reservations and releases them:
+
+<CodeGroup>
+```go Expiration worker
+service.StartExpirationWorker(ctx)
+// Polls every EXPIRATION_POLL_INTERVAL (default: 30s)
+// Releases reservations past their expiresAt timestamp
+```
+</CodeGroup>
+
+## Performance considerations
+
+- **Redis caching**: Frequently accessed inventory data is cached in Redis
+- **Connection pooling**: PostgreSQL connections are pooled via pgxpool
+- **Atomic operations**: Stock updates use database transactions for consistency
+- **Structured logging**: JSON logs for production observability
+
+## Dependencies
+
+- **PostgreSQL**: For persistent inventory storage
+- **Redis**: For caching and reservation expiration tracking
+- **Product service**: For product ID validation (optional)
+
+## Source code
+
+Location: `~/workspace/source/micros/inventory-service/`
+
+Key files:
+- `cmd/main.go` - Application entry point
+- `internal/handlers/inventory_handler.go` - HTTP handlers
+- `internal/services/inventory_service.go` - Business logic
+- `internal/repository/inventory_repository.go` - Database operations
+- `internal/routes/routes.go` - Route definitions
+- `internal/config/config.go` - Configuration
+- `internal/models/inventory.go` - Data models

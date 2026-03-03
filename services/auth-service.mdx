@@ -1,0 +1,376 @@
+---
+title: Auth service
+description: Spring Boot authentication service with JWT tokens
+---
+
+The Auth service handles user authentication, registration, and token management for the QeetMart platform. It issues JWT access tokens and refresh tokens.
+
+## Overview
+
+Built with Spring Boot 3.3.8 and Spring Security, the auth service manages user credentials, authentication flows, session management, and audit logging.
+
+<Note>
+The Auth service runs on port **4001** by default and uses PostgreSQL for data persistence.
+</Note>
+
+## Technology stack
+
+- **Framework**: Spring Boot 3.3.8
+- **Language**: Java 17
+- **Database**: PostgreSQL
+- **Security**: Spring Security + JWT (jjwt 0.12.6)
+- **Key dependencies**:
+  - Spring Data JPA
+  - Spring Security
+  - Spring Boot Actuator
+  - Micrometer Prometheus
+  - Lombok
+
+## Configuration
+
+### Environment variables
+
+<ParamField path="SERVER_PORT" type="number" default="4001">
+  Server port
+</ParamField>
+
+<ParamField path="SPRING_PROFILES_ACTIVE" type="string" default="dev">
+  Active Spring profile (dev, prod)
+</ParamField>
+
+### Database configuration
+
+<ParamField path="DB_HOST" type="string" default="localhost">
+  PostgreSQL host
+</ParamField>
+
+<ParamField path="DB_PORT" type="number" default="5001">
+  PostgreSQL port
+</ParamField>
+
+<ParamField path="DB_NAME" type="string" default="qeetmart_auth">
+  Database name
+</ParamField>
+
+<ParamField path="DB_USERNAME" type="string" default="postgres">
+  Database username
+</ParamField>
+
+<ParamField path="DB_PASSWORD" type="string" required>
+  Database password
+</ParamField>
+
+### JWT configuration
+
+<ParamField path="JWT_SECRET" type="string" required>
+  JWT signing secret (minimum 32 bytes recommended)
+</ParamField>
+
+<ParamField path="JWT_ISSUER_URI" type="string" default="http://localhost:4001">
+  JWT issuer URI
+</ParamField>
+
+<ParamField path="JWT_ACCESS_TOKEN_EXPIRATION" type="string" default="15m">
+  Access token expiration (e.g., 15m, 1h)
+</ParamField>
+
+<ParamField path="JWT_REFRESH_TOKEN_EXPIRATION" type="string" default="7d">
+  Refresh token expiration (e.g., 7d, 30d)
+</ParamField>
+
+### Security configuration
+
+<ParamField path="SECURITY_LOGIN_MAX_ATTEMPTS" type="number" default="5">
+  Maximum failed login attempts before account lock
+</ParamField>
+
+<ParamField path="SECURITY_LOGIN_LOCK_DURATION_MINUTES" type="number" default="15">
+  Account lock duration in minutes
+</ParamField>
+
+<ParamField path="SECURITY_LOGIN_REQUIRE_EMAIL_VERIFIED" type="boolean" default="false">
+  Require email verification for login
+</ParamField>
+
+<ParamField path="SECURITY_LOGIN_SINGLE_SESSION_ENABLED" type="boolean" default="false">
+  Allow only one active session per user
+</ParamField>
+
+## API endpoints
+
+### Register
+
+<CodeGroup>
+```bash POST /auth/register
+curl -X POST http://localhost:4001/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePass123!"
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "message": "User registered successfully",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "tokenType": "Bearer",
+    "expiresIn": 900
+  }
+}
+```
+</CodeGroup>
+
+### Login
+
+<CodeGroup>
+```bash POST /auth/login
+curl -X POST http://localhost:4001/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePass123!",
+    "deviceId": "mobile-device-123"
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "tokenType": "Bearer",
+    "expiresIn": 900
+  }
+}
+```
+</CodeGroup>
+
+### Refresh token
+
+<CodeGroup>
+```bash POST /auth/refresh-token
+curl -X POST http://localhost:4001/auth/refresh-token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "message": "Token refreshed successfully",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "tokenType": "Bearer",
+    "expiresIn": 900
+  }
+}
+```
+</CodeGroup>
+
+### Get current user
+
+<CodeGroup>
+```bash GET /auth/me
+curl http://localhost:4001/auth/me \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+```json Response
+{
+  "success": true,
+  "message": "Current user fetched successfully",
+  "data": {
+    "id": 1,
+    "email": "user@example.com",
+    "role": "CUSTOMER",
+    "accountStatus": "ACTIVE",
+    "emailVerified": true,
+    "createdAt": "2026-03-01T10:00:00Z",
+    "updatedAt": "2026-03-03T10:30:00Z"
+  }
+}
+```
+</CodeGroup>
+
+### Change password
+
+<CodeGroup>
+```bash POST /auth/change-password
+curl -X POST http://localhost:4001/auth/change-password \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "oldPassword": "OldPass123!",
+    "newPassword": "NewSecurePass456!"
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "message": "Password changed successfully",
+  "data": null
+}
+```
+</CodeGroup>
+
+### Logout
+
+<CodeGroup>
+```bash POST /auth/logout
+curl -X POST http://localhost:4001/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "message": "Logged out successfully",
+  "data": null
+}
+```
+</CodeGroup>
+
+### Logout all devices
+
+<CodeGroup>
+```bash POST /auth/logout-all
+curl -X POST http://localhost:4001/auth/logout-all \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+```json Response
+{
+  "success": true,
+  "message": "Logged out from all devices",
+  "data": null
+}
+```
+</CodeGroup>
+
+## Data models
+
+### UserCredential entity
+
+<CodeGroup>
+```java UserCredential.java
+@Entity
+@Table(name = "user_credentials")
+public class UserCredential {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, unique = true, length = 255)
+    private String email;
+
+    @Column(name = "password_hash", nullable = false, length = 255)
+    private String passwordHash;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Role role; // CUSTOMER, ADMIN
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "account_status", nullable = false, length = 20)
+    private AccountStatus accountStatus; // ACTIVE, LOCKED, SUSPENDED
+
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
+    @Column(name = "failed_login_attempts", nullable = false)
+    private int failedLoginAttempts;
+
+    @Column(name = "lock_until")
+    private Instant lockUntil;
+
+    @Column(name = "last_login_at")
+    private Instant lastLoginAt;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+}
+```
+</CodeGroup>
+
+### RefreshToken entity
+
+The service stores refresh tokens in the database for session management and revocation.
+
+## Health check
+
+<CodeGroup>
+```bash GET /actuator/health
+curl http://localhost:4001/actuator/health
+```
+
+```json Response
+{
+  "status": "UP",
+  "groups": [
+    "liveness",
+    "readiness"
+  ]
+}
+```
+</CodeGroup>
+
+## Metrics
+
+Prometheus metrics are available at `/actuator/prometheus`.
+
+## Running the service
+
+<CodeGroup>
+```bash Maven
+cd auth-service
+mvn spring-boot:run
+```
+
+```bash Production
+mvn clean package
+java -jar target/auth-service-0.0.1-SNAPSHOT.jar
+```
+</CodeGroup>
+
+## Security features
+
+- **Password hashing**: BCrypt with configurable strength
+- **Account lockout**: Automatic locking after failed login attempts
+- **Token rotation**: New refresh token issued on each refresh
+- **Audit logging**: All authentication events logged
+- **Session management**: Device-based session tracking
+
+<Warning>
+The `JWT_SECRET` must be kept secure and should be at least 32 bytes. Use the same secret across API Gateway and all services that verify tokens.
+</Warning>
+
+## Dependencies
+
+- **PostgreSQL**: For user credentials and refresh tokens
+- **No external service dependencies**
+
+## Source code
+
+Location: `~/workspace/source/micros/auth-service/`
+
+Key files:
+- `src/main/java/com/qeetmart/auth/api/controller/AuthController.java` - REST endpoints
+- `src/main/java/com/qeetmart/auth/application/service/AuthApplicationService.java` - Business logic
+- `src/main/java/com/qeetmart/auth/domain/entity/UserCredential.java` - User entity
+- `src/main/resources/application.yml` - Configuration

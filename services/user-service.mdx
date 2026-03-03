@@ -1,0 +1,316 @@
+---
+title: User service
+description: Spring Boot user profile management service
+---
+
+The User service manages user profiles and addresses for the QeetMart platform. It provides CRUD operations for user data with role-based access control.
+
+## Overview
+
+Built with Spring Boot 3.3.8, the user service handles user profile information, address management, and integrates with the auth service for JWT-based authentication.
+
+<Note>
+The User service runs on port **8082** by default and uses PostgreSQL for data persistence.
+</Note>
+
+## Technology stack
+
+- **Framework**: Spring Boot 3.3.8
+- **Language**: Java 17
+- **Database**: PostgreSQL
+- **Security**: Spring Security + OAuth2 Resource Server
+- **Key dependencies**:
+  - Spring Data JPA
+  - Spring Security OAuth2 Resource Server
+  - Spring Boot Actuator
+  - Micrometer Prometheus
+  - Lombok
+
+## Configuration
+
+### Environment variables
+
+<ParamField path="SERVER_PORT" type="number" default="8082">
+  Server port
+</ParamField>
+
+### Database configuration
+
+<ParamField path="DB_HOST" type="string" default="localhost">
+  PostgreSQL host
+</ParamField>
+
+<ParamField path="DB_PORT" type="number" default="5432">
+  PostgreSQL port
+</ParamField>
+
+<ParamField path="DB_NAME" type="string" default="user_db">
+  Database name
+</ParamField>
+
+<ParamField path="DB_USERNAME" type="string" default="postgres">
+  Database username
+</ParamField>
+
+<ParamField path="DB_PASSWORD" type="string" required>
+  Database password
+</ParamField>
+
+<ParamField path="JPA_DDL_AUTO" type="string" default="validate">
+  Hibernate DDL auto (update for dev, validate for prod)
+</ParamField>
+
+### JWT configuration
+
+<ParamField path="JWT_SECRET" type="string" required>
+  JWT verification secret (must match auth-service)
+</ParamField>
+
+<ParamField path="JWT_ISSUER_URI" type="string" default="http://localhost:4001">
+  JWT issuer URI for validation
+</ParamField>
+
+## API endpoints
+
+### User profile endpoints
+
+#### Create user profile
+
+<CodeGroup>
+```bash POST /users
+curl -X POST http://localhost:8082/users \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 1,
+    "name": "John Doe",
+    "email": "john@example.com",
+    "phone": "+1234567890"
+  }'
+```
+
+```json Response
+{
+  "id": 1,
+  "userId": 1,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "+1234567890",
+  "createdAt": "2026-03-03T10:00:00Z",
+  "updatedAt": "2026-03-03T10:00:00Z"
+}
+```
+</CodeGroup>
+
+#### Get all users (Admin only)
+
+<CodeGroup>
+```bash GET /users
+curl "http://localhost:8082/users?page=0&size=10&sortBy=createdAt&sortDir=desc" \
+  -H "Authorization: Bearer <admin-token>"
+```
+
+```json Response
+{
+  "content": [
+    {
+      "id": 1,
+      "userId": 1,
+      "name": "John Doe",
+      "email": "john@example.com",
+      "phone": "+1234567890",
+      "createdAt": "2026-03-03T10:00:00Z",
+      "updatedAt": "2026-03-03T10:00:00Z"
+    }
+  ],
+  "page": 0,
+  "size": 10,
+  "totalElements": 1,
+  "totalPages": 1
+}
+```
+</CodeGroup>
+
+#### Get user by ID
+
+<CodeGroup>
+```bash GET /users/{userId}
+curl http://localhost:8082/users/1 \
+  -H "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "id": 1,
+  "userId": 1,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "+1234567890",
+  "createdAt": "2026-03-03T10:00:00Z",
+  "updatedAt": "2026-03-03T10:00:00Z"
+}
+```
+</CodeGroup>
+
+#### Update user profile
+
+<CodeGroup>
+```bash PUT /users/{userId}
+curl -X PUT http://localhost:8082/users/1 \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Updated",
+    "phone": "+0987654321"
+  }'
+```
+
+```json Response
+{
+  "id": 1,
+  "userId": 1,
+  "name": "John Updated",
+  "email": "john@example.com",
+  "phone": "+0987654321",
+  "createdAt": "2026-03-03T10:00:00Z",
+  "updatedAt": "2026-03-03T10:30:00Z"
+}
+```
+</CodeGroup>
+
+#### Delete user profile
+
+<CodeGroup>
+```bash DELETE /users/{userId}
+curl -X DELETE http://localhost:8082/users/1 \
+  -H "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "message": "User profile deleted successfully"
+}
+```
+</CodeGroup>
+
+### Address endpoints
+
+The service also provides address management endpoints for user shipping/billing addresses. See the AddressController for full details.
+
+## Data models
+
+### UserProfile entity
+
+<CodeGroup>
+```java UserProfile.java
+@Entity
+@Table(name = "user_profiles")
+public class UserProfile {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "user_id", nullable = false, unique = true)
+    private Long userId;
+
+    @Column(nullable = false, length = 120)
+    private String name;
+
+    @Column(nullable = false, length = 255)
+    private String email;
+
+    @Column(length = 20)
+    private String phone;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+}
+```
+</CodeGroup>
+
+### Address entity
+
+Users can have multiple addresses for shipping and billing purposes.
+
+## Authorization
+
+The service uses Spring Security with custom authorization logic:
+
+- **Admin users** can access all user profiles
+- **Regular users** can only access their own profile
+- Authorization is handled by `@authorizationService.canAccessUser(authentication, #userId)`
+
+<CodeGroup>
+```java UserController.java
+@GetMapping("/{userId}")
+@PreAuthorize("@authorizationService.canAccessUser(authentication, #userId)")
+public ResponseEntity<UserProfileResponse> getUserByUserId(@PathVariable Long userId) {
+    return ResponseEntity.ok(userProfileService.getByUserId(userId));
+}
+```
+</CodeGroup>
+
+## Health check
+
+<CodeGroup>
+```bash GET /actuator/health
+curl http://localhost:8082/actuator/health
+```
+
+```json Response
+{
+  "status": "UP",
+  "groups": [
+    "liveness",
+    "readiness"
+  ]
+}
+```
+</CodeGroup>
+
+## Metrics
+
+Prometheus metrics are available at `/actuator/prometheus`.
+
+## Running the service
+
+<CodeGroup>
+```bash Maven
+cd user-service
+mvn spring-boot:run
+```
+
+```bash Production
+mvn clean package
+java -jar target/user-service-0.0.1-SNAPSHOT.jar
+```
+</CodeGroup>
+
+## Security
+
+- **JWT Authentication**: All endpoints require valid JWT token
+- **Role-based access**: ADMIN role required for listing all users
+- **Resource-based authorization**: Users can only access their own data
+
+<Warning>
+Ensure the `JWT_SECRET` matches the secret used in the auth-service for proper token validation.
+</Warning>
+
+## Dependencies
+
+- **PostgreSQL**: For user profile and address storage
+- **Auth service**: For JWT token issuance and user ID mapping
+
+## Source code
+
+Location: `~/workspace/source/micros/user-service/`
+
+Key files:
+- `src/main/java/com/qeetmart/user/api/controller/UserController.java` - User endpoints
+- `src/main/java/com/qeetmart/user/api/controller/AddressController.java` - Address endpoints
+- `src/main/java/com/qeetmart/user/domain/entity/UserProfile.java` - User entity
+- `src/main/java/com/qeetmart/user/infrastructure/security/AuthorizationService.java` - Authorization logic
+- `src/main/resources/application.yml` - Configuration

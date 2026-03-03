@@ -1,0 +1,514 @@
+---
+title: Users API endpoints
+description: Complete reference for all Users API endpoints with request and response examples
+---
+
+## Create user profile
+
+<api>POST /users</api>
+
+Creates a new user profile with the provided information. This endpoint is typically called after user registration in the authentication service.
+
+### Request body
+
+<ParamField body="name" type="string" required>
+  The user's full name. Must be between 1 and 120 characters.
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  The user's email address. Must be a valid email format and at most 255 characters.
+</ParamField>
+
+<ParamField body="phone" type="string" required>
+  The user's phone number. Must match the pattern `^[0-9+()\- ]{7,20}$` (7-20 characters including digits, +, (), -, and spaces).
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="integer">
+  The unique identifier for the created user profile
+</ResponseField>
+
+<ResponseField name="userId" type="integer">
+  The user ID from the authentication system
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The user's full name
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  The user's email address
+</ResponseField>
+
+<ResponseField name="phone" type="string">
+  The user's phone number
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp when the profile was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp when the profile was last updated
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8082/users \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "name": "John Smith",
+    "email": "john.smith@example.com",
+    "phone": "+1 (555) 123-4567"
+  }'
+```
+
+```json Request
+{
+  "name": "John Smith",
+  "email": "john.smith@example.com",
+  "phone": "+1 (555) 123-4567"
+}
+```
+
+```json 201 Response
+{
+  "id": 42,
+  "userId": 1001,
+  "name": "John Smith",
+  "email": "john.smith@example.com",
+  "phone": "+1 (555) 123-4567",
+  "createdAt": "2026-03-03T10:15:30Z",
+  "updatedAt": "2026-03-03T10:15:30Z"
+}
+```
+
+```json 400 Error
+{
+  "timestamp": "2026-03-03T10:15:30Z",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Validation failed",
+  "path": "/users",
+  "validationErrors": {
+    "email": "email must be valid",
+    "phone": "phone must be a valid number"
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## List users
+
+<api>GET /users</api>
+
+Retrieves a paginated list of all user profiles. This endpoint requires admin privileges.
+
+### Query parameters
+
+<ParamField query="page" type="integer" default="0">
+  The page number to retrieve (0-indexed). Must be 0 or greater.
+</ParamField>
+
+<ParamField query="size" type="integer" default="10">
+  The number of items per page. Must be between 1 and 100.
+</ParamField>
+
+<ParamField query="sortBy" type="string" default="createdAt">
+  The field to sort by. Common values: `createdAt`, `name`, `email`, `updatedAt`.
+</ParamField>
+
+<ParamField query="sortDir" type="string" default="desc">
+  The sort direction. Valid values: `asc`, `desc`.
+</ParamField>
+
+### Response
+
+<ResponseField name="content" type="array">
+  Array of user profile objects
+  
+  <Expandable title="User profile object">
+    <ResponseField name="id" type="integer">
+      The unique identifier for the user profile
+    </ResponseField>
+    
+    <ResponseField name="userId" type="integer">
+      The user ID from the authentication system
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      The user's full name
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      The user's email address
+    </ResponseField>
+    
+    <ResponseField name="phone" type="string">
+      The user's phone number
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp when the profile was created
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp when the profile was last updated
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="page" type="integer">
+  The current page number (0-indexed)
+</ResponseField>
+
+<ResponseField name="size" type="integer">
+  The number of items per page
+</ResponseField>
+
+<ResponseField name="totalElements" type="integer">
+  The total number of user profiles
+</ResponseField>
+
+<ResponseField name="totalPages" type="integer">
+  The total number of pages available
+</ResponseField>
+
+<ResponseField name="last" type="boolean">
+  Whether this is the last page
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:8082/users?page=0&size=10&sortBy=createdAt&sortDir=desc" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```json 200 Response
+{
+  "content": [
+    {
+      "id": 42,
+      "userId": 1001,
+      "name": "John Smith",
+      "email": "john.smith@example.com",
+      "phone": "+1 (555) 123-4567",
+      "createdAt": "2026-03-03T10:15:30Z",
+      "updatedAt": "2026-03-03T10:15:30Z"
+    },
+    {
+      "id": 41,
+      "userId": 1000,
+      "name": "Jane Doe",
+      "email": "jane.doe@example.com",
+      "phone": "+1 (555) 987-6543",
+      "createdAt": "2026-03-02T14:22:15Z",
+      "updatedAt": "2026-03-02T14:22:15Z"
+    }
+  ],
+  "page": 0,
+  "size": 10,
+  "totalElements": 42,
+  "totalPages": 5,
+  "last": false
+}
+```
+
+```json 401 Error
+{
+  "timestamp": "2026-03-03T10:15:30Z",
+  "status": 401,
+  "error": "Unauthorized",
+  "message": "Authentication required",
+  "path": "/users"
+}
+```
+
+```json 403 Error
+{
+  "timestamp": "2026-03-03T10:15:30Z",
+  "status": 403,
+  "error": "Forbidden",
+  "message": "Admin role required",
+  "path": "/users"
+}
+```
+</CodeGroup>
+
+---
+
+## Get user by ID
+
+<api>GET /users/{userId}</api>
+
+Retrieves a specific user profile by user ID. Users can only access their own profile unless they have admin privileges.
+
+### Path parameters
+
+<ParamField path="userId" type="integer" required>
+  The unique user ID to retrieve
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="integer">
+  The unique identifier for the user profile
+</ResponseField>
+
+<ResponseField name="userId" type="integer">
+  The user ID from the authentication system
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The user's full name
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  The user's email address
+</ResponseField>
+
+<ResponseField name="phone" type="string">
+  The user's phone number
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp when the profile was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp when the profile was last updated
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:8082/users/1001 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```json 200 Response
+{
+  "id": 42,
+  "userId": 1001,
+  "name": "John Smith",
+  "email": "john.smith@example.com",
+  "phone": "+1 (555) 123-4567",
+  "createdAt": "2026-03-03T10:15:30Z",
+  "updatedAt": "2026-03-03T10:15:30Z"
+}
+```
+
+```json 404 Error
+{
+  "timestamp": "2026-03-03T10:15:30Z",
+  "status": 404,
+  "error": "Not Found",
+  "message": "User profile not found",
+  "path": "/users/1001"
+}
+```
+
+```json 403 Error
+{
+  "timestamp": "2026-03-03T10:15:30Z",
+  "status": 403,
+  "error": "Forbidden",
+  "message": "Access denied",
+  "path": "/users/1001"
+}
+```
+</CodeGroup>
+
+---
+
+## Update user profile
+
+<api>PUT /users/{userId}</api>
+
+Updates an existing user profile. Users can only update their own profile unless they have admin privileges.
+
+### Path parameters
+
+<ParamField path="userId" type="integer" required>
+  The unique user ID to update
+</ParamField>
+
+### Request body
+
+<ParamField body="name" type="string" required>
+  The user's full name. Must be between 1 and 120 characters.
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  The user's email address. Must be a valid email format and at most 255 characters.
+</ParamField>
+
+<ParamField body="phone" type="string" required>
+  The user's phone number. Must match the pattern `^[0-9+()\- ]{7,20}$`.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="integer">
+  The unique identifier for the user profile
+</ResponseField>
+
+<ResponseField name="userId" type="integer">
+  The user ID from the authentication system
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The updated user's full name
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  The updated user's email address
+</ResponseField>
+
+<ResponseField name="phone" type="string">
+  The updated user's phone number
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp when the profile was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp when the profile was last updated
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X PUT http://localhost:8082/users/1001 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "name": "John A. Smith",
+    "email": "john.smith@example.com",
+    "phone": "+1 (555) 123-4567"
+  }'
+```
+
+```json Request
+{
+  "name": "John A. Smith",
+  "email": "john.smith@example.com",
+  "phone": "+1 (555) 123-4567"
+}
+```
+
+```json 200 Response
+{
+  "id": 42,
+  "userId": 1001,
+  "name": "John A. Smith",
+  "email": "john.smith@example.com",
+  "phone": "+1 (555) 123-4567",
+  "createdAt": "2026-03-03T10:15:30Z",
+  "updatedAt": "2026-03-03T11:30:45Z"
+}
+```
+
+```json 400 Error
+{
+  "timestamp": "2026-03-03T10:15:30Z",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Validation failed",
+  "path": "/users/1001",
+  "validationErrors": {
+    "name": "name must be at most 120 characters"
+  }
+}
+```
+
+```json 404 Error
+{
+  "timestamp": "2026-03-03T10:15:30Z",
+  "status": 404,
+  "error": "Not Found",
+  "message": "User profile not found",
+  "path": "/users/1001"
+}
+```
+</CodeGroup>
+
+---
+
+## Delete user profile
+
+<api>DELETE /users/{userId}</api>
+
+Deletes a user profile. Users can only delete their own profile unless they have admin privileges.
+
+### Path parameters
+
+<ParamField path="userId" type="integer" required>
+  The unique user ID to delete
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  A confirmation message indicating successful deletion
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE http://localhost:8082/users/1001 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```json 200 Response
+{
+  "message": "User profile deleted successfully"
+}
+```
+
+```json 404 Error
+{
+  "timestamp": "2026-03-03T10:15:30Z",
+  "status": 404,
+  "error": "Not Found",
+  "message": "User profile not found",
+  "path": "/users/1001"
+}
+```
+
+```json 403 Error
+{
+  "timestamp": "2026-03-03T10:15:30Z",
+  "status": 403,
+  "error": "Forbidden",
+  "message": "Access denied",
+  "path": "/users/1001"
+}
+```
+</CodeGroup>
+
+---
+
+## Health check
+
+<api>GET /actuator/health</api>
+
+Checks the health status of the User Service. This endpoint is typically used by monitoring systems and load balancers.
+
+### Response
+
+Returns a 200 status code when the service is healthy.
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:8082/actuator/health
+```
+
+```json 200 Response
+{
+  "status": "UP"
+}
+```
+</CodeGroup>

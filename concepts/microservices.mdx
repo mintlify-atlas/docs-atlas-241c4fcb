@@ -1,0 +1,278 @@
+---
+title: Microservices architecture
+description: Understanding QeetMart's microservices architecture, service topology, and technology stack
+---
+
+QeetMart is built using a microservices architecture pattern where business capabilities are decomposed into independent, loosely coupled services. Each service owns its data, runs in its own process, and communicates through well-defined APIs.
+
+## Service topology
+
+The QeetMart platform follows a gateway-based microservices pattern:
+
+```text
+Clients → API Gateway → Domain Microservices
+                       ├─ Auth Service
+                       ├─ User Service
+                       ├─ Product Service
+                       └─ Inventory Service
+```
+
+All client applications (web, mobile, admin) communicate exclusively through the API Gateway. Direct service-to-service communication is not used in the current architecture.
+
+## Service catalog
+
+<Tabs>
+  <Tab title="API Gateway">
+    **Runtime**: Node.js + TypeScript + Express
+    
+    **Port**: `4000`
+    
+    **Health endpoint**: `/health`
+    
+    **Data store**: None (stateless)
+    
+    **Responsibilities**:
+    - Single entry point for all client requests
+    - JWT token validation
+    - Request routing to downstream services
+    - Rate limiting and CORS handling
+    - Correlation ID propagation
+    
+    **Location**: `micros/api-gateway`
+  </Tab>
+  
+  <Tab title="Auth Service">
+    **Runtime**: Spring Boot (Java 17)
+    
+    **Port**: `4001`
+    
+    **Health endpoint**: `/actuator/health`
+    
+    **Data store**: PostgreSQL (`auth_db`)
+    
+    **Responsibilities**:
+    - User registration and login
+    - JWT access and refresh token generation
+    - Password management
+    - Account locking and login attempts tracking
+    - Session management
+    
+    **Location**: `micros/auth-service`
+  </Tab>
+  
+  <Tab title="User Service">
+    **Runtime**: Spring Boot (Java 17)
+    
+    **Port**: `8082`
+    
+    **Health endpoint**: `/actuator/health`
+    
+    **Data store**: PostgreSQL (`user_db`)
+    
+    **Responsibilities**:
+    - User profile management
+    - Address management
+    - User preferences and settings
+    
+    **Location**: `micros/user-service`
+  </Tab>
+  
+  <Tab title="Product Service">
+    **Runtime**: Spring Boot (Java 17)
+    
+    **Port**: `8083`
+    
+    **Health endpoint**: `/actuator/health`
+    
+    **Data store**: PostgreSQL (`product_db`)
+    
+    **Responsibilities**:
+    - Product catalog management
+    - Category management
+    - Product variants and pricing
+    - Product search and filtering
+    
+    **Location**: `micros/product-service`
+  </Tab>
+  
+  <Tab title="Inventory Service">
+    **Runtime**: Go + Gin
+    
+    **Port**: `8080`
+    
+    **Health endpoint**: `/health`
+    
+    **Data store**: PostgreSQL + Redis
+    
+    **Responsibilities**:
+    - Stock level tracking
+    - Stock reservation with TTL
+    - Reservation release and deduction
+    - Background expiration worker
+    
+    **Location**: `micros/inventory-service`
+  </Tab>
+</Tabs>
+
+## Technology stack diversity
+
+QeetMart intentionally uses multiple technology stacks across services:
+
+<Accordion title="Why multiple languages?">
+  The platform demonstrates a polyglot microservices architecture where each service can use the most appropriate technology for its domain:
+  
+  - **Node.js/TypeScript** for the API Gateway: Fast I/O, excellent HTTP proxy libraries, minimal logic
+  - **Java/Spring Boot** for business services: Robust ecosystem, type safety, enterprise patterns
+  - **Go** for inventory service: High concurrency, excellent for real-time operations, lightweight
+  
+  This approach showcases how microservices enable technology diversity while maintaining integration through standard HTTP/JSON APIs.
+</Accordion>
+
+## Service communication
+
+### Synchronous HTTP/REST
+
+All services communicate using synchronous HTTP/REST APIs with JSON payloads. The API Gateway acts as a reverse proxy, forwarding requests to the appropriate downstream service.
+
+```typescript
+// Gateway routing configuration
+export const routeConfig = [
+  { path: '/api/v1/auth', service: 'auth', upstreamPath: '/auth' },
+  { path: '/api/v1/users', service: 'users', upstreamPath: '/users' },
+  { path: '/api/v1/products', service: 'products', upstreamPath: '/products' },
+  { path: '/api/v1/inventory', service: 'inventory', upstreamPath: '/inventory' },
+];
+```
+
+From `micros/api-gateway/src/config/services.ts:55`
+
+### Request correlation
+
+The gateway propagates correlation IDs to all downstream services for distributed tracing:
+
+```typescript
+if (correlationId) {
+  proxyReq.setHeader('x-correlation-id', correlationId);
+  proxyReq.setHeader('x-request-id', correlationId);
+}
+```
+
+From `micros/api-gateway/src/routes/gateway.routes.ts:77`
+
+## Data architecture
+
+<Note>
+  Each microservice owns its database. There is no shared database across services. This ensures loose coupling and independent deployability.
+</Note>
+
+**Database per service**:
+- `auth-service` → `auth_db` (PostgreSQL)
+- `user-service` → `user_db` (PostgreSQL)
+- `product-service` → `product_db` (PostgreSQL)
+- `inventory-service` → `inventory` (PostgreSQL + Redis)
+
+The inventory service uses Redis for reservation caching with TTL expiration, while PostgreSQL serves as the source of truth for stock levels.
+
+## Service isolation and failure handling
+
+### Timeouts
+
+All service calls have configured timeouts to prevent cascading failures:
+
+```typescript
+export const services: Record<string, ServiceConfig> = {
+  auth: {
+    name: 'auth-service',
+    baseUrl: process.env['AUTH_SERVICE_URL'] || 'http://localhost:4001',
+    timeout: 5000,
+  },
+  // ... other services
+};
+```
+
+From `micros/api-gateway/src/config/services.ts:13`
+
+### Error handling
+
+The gateway returns standardized error responses when downstream services are unavailable:
+
+```typescript
+if (isExpressResponse(res) && !res.headersSent) {
+  const payload = JSON.stringify({
+    success: false,
+    error: {
+      message: `Service ${serviceConfig.name} is unavailable`,
+      code: 'SERVICE_UNAVAILABLE',
+      correlationId,
+    },
+  });
+  res.status(502).type('application/json').send(payload);
+}
+```
+
+From `micros/api-gateway/src/routes/gateway.routes.ts:57`
+
+## Development and deployment
+
+### Local development
+
+Run the full stack locally using Docker Compose:
+
+```bash
+pnpm docker:up
+```
+
+This starts all services with their databases and Redis instances.
+
+### Service health checks
+
+Each service exposes a health endpoint. The gateway provides an aggregated health check:
+
+```bash
+curl http://localhost:4000/health/services
+```
+
+Response includes health status for all downstream services.
+
+## Design principles
+
+<Info>
+  **Key architectural rules:**
+  - Gateway is the only public entry point for client applications
+  - Services do not call other services directly
+  - Each service has its own database
+  - API changes must be reflected in `contracts/openapi`
+  - Breaking changes require explicit versioning strategy
+</Info>
+
+### Service boundaries
+
+Services are organized by business domain:
+- **Auth**: Identity and access management
+- **User**: User profile and preferences
+- **Product**: Catalog and product information
+- **Inventory**: Stock management and reservations
+
+This domain-driven approach ensures clear ownership and minimal coupling between teams.
+
+## Scalability considerations
+
+Each service can be scaled independently based on its load characteristics:
+- **API Gateway**: Stateless, scales horizontally
+- **Auth Service**: Database-bound, consider connection pooling
+- **Inventory Service**: High concurrency, Redis caching reduces DB load
+- **Product Service**: Read-heavy, candidate for caching layer
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="API Gateway" icon="door-open" href="/concepts/api-gateway">
+    Learn about routing, authentication, and request handling
+  </Card>
+  <Card title="Authentication" icon="lock" href="/concepts/authentication">
+    Understand JWT flow and token validation
+  </Card>
+  <Card title="Data Persistence" icon="database" href="/concepts/data-persistence">
+    Explore database models and relationships
+  </Card>
+</CardGroup>

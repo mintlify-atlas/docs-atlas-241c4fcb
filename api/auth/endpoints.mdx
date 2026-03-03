@@ -1,0 +1,816 @@
+---
+title: Authentication endpoints
+description: Detailed endpoint documentation for user authentication, session management, and profile operations
+---
+
+## Register customer account
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4001/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "customer@example.com",
+    "password": "SecurePass123!"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:4001/auth/register', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    email: 'customer@example.com',
+    password: 'SecurePass123!'
+  })
+});
+
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'http://localhost:4001/auth/register',
+    json={
+        'email': 'customer@example.com',
+        'password': 'SecurePass123!'
+    }
+)
+
+data = response.json()
+```
+</CodeGroup>
+
+<RequestExample>
+```http POST /auth/register
+Content-Type: application/json
+
+{
+  "email": "customer@example.com",
+  "password": "SecurePass123!"
+}
+```
+</RequestExample>
+
+### Request body
+
+<ParamField body="email" type="string" required>
+  User email address. Must be a valid email format.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User password. Must be between 8 and 128 characters.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable response message
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Authentication token data
+  
+  <Expandable title="properties">
+    <ResponseField name="accessToken" type="string">
+      JWT access token for authenticated requests
+    </ResponseField>
+    
+    <ResponseField name="refreshToken" type="string">
+      Refresh token for token rotation
+    </ResponseField>
+    
+    <ResponseField name="tokenType" type="string">
+      Token type (always "Bearer")
+    </ResponseField>
+    
+    <ResponseField name="expiresIn" type="integer">
+      Access token TTL in seconds
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="timestamp" type="string">
+  ISO 8601 timestamp of the response
+</ResponseField>
+
+<ResponseExample>
+```json 201 Created
+{
+  "success": true,
+  "message": "User registered successfully",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "7f4d8e2a-1b3c-4e5f-9a8b-7c6d5e4f3a2b",
+    "tokenType": "Bearer",
+    "expiresIn": 3600
+  },
+  "timestamp": "2026-03-03T10:30:00Z"
+}
+```
+
+```json 400 Bad Request
+{
+  "success": false,
+  "message": "Email already registered",
+  "data": null,
+  "timestamp": "2026-03-03T10:30:00Z"
+}
+```
+</ResponseExample>
+
+---
+
+## Login with email and password
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4001/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "customer@example.com",
+    "password": "SecurePass123!",
+    "deviceId": "mobile-app-ios-001"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:4001/auth/login', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    email: 'customer@example.com',
+    password: 'SecurePass123!',
+    deviceId: 'mobile-app-ios-001'
+  })
+});
+
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'http://localhost:4001/auth/login',
+    json={
+        'email': 'customer@example.com',
+        'password': 'SecurePass123!',
+        'deviceId': 'mobile-app-ios-001'
+    }
+)
+
+data = response.json()
+```
+</CodeGroup>
+
+<RequestExample>
+```http POST /auth/login
+Content-Type: application/json
+
+{
+  "email": "customer@example.com",
+  "password": "SecurePass123!",
+  "deviceId": "mobile-app-ios-001"
+}
+```
+</RequestExample>
+
+### Request body
+
+<ParamField body="email" type="string" required>
+  User email address
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User password
+</ParamField>
+
+<ParamField body="deviceId" type="string">
+  Optional client device identifier for multi-device session tracking
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable response message
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Authentication token data
+  
+  <Expandable title="properties">
+    <ResponseField name="accessToken" type="string">
+      JWT access token for authenticated requests
+    </ResponseField>
+    
+    <ResponseField name="refreshToken" type="string">
+      Refresh token for token rotation
+    </ResponseField>
+    
+    <ResponseField name="tokenType" type="string">
+      Token type (always "Bearer")
+    </ResponseField>
+    
+    <ResponseField name="expiresIn" type="integer">
+      Access token TTL in seconds
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="timestamp" type="string">
+  ISO 8601 timestamp of the response
+</ResponseField>
+
+<ResponseExample>
+```json 200 OK
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "9b2c8f4a-3d5e-6f7a-8b9c-0d1e2f3a4b5c",
+    "tokenType": "Bearer",
+    "expiresIn": 3600
+  },
+  "timestamp": "2026-03-03T10:30:00Z"
+}
+```
+
+```json 401 Unauthorized
+{
+  "success": false,
+  "message": "Invalid credentials",
+  "data": null,
+  "timestamp": "2026-03-03T10:30:00Z"
+}
+```
+
+```json 403 Forbidden
+{
+  "success": false,
+  "message": "Email not verified",
+  "data": null,
+  "timestamp": "2026-03-03T10:30:00Z"
+}
+```
+
+```json 423 Locked
+{
+  "success": false,
+  "message": "Account locked",
+  "data": null,
+  "timestamp": "2026-03-03T10:30:00Z"
+}
+```
+</ResponseExample>
+
+---
+
+## Rotate access and refresh tokens
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4001/auth/refresh-token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refreshToken": "9b2c8f4a-3d5e-6f7a-8b9c-0d1e2f3a4b5c"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:4001/auth/refresh-token', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    refreshToken: '9b2c8f4a-3d5e-6f7a-8b9c-0d1e2f3a4b5c'
+  })
+});
+
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'http://localhost:4001/auth/refresh-token',
+    json={
+        'refreshToken': '9b2c8f4a-3d5e-6f7a-8b9c-0d1e2f3a4b5c'
+    }
+)
+
+data = response.json()
+```
+</CodeGroup>
+
+<RequestExample>
+```http POST /auth/refresh-token
+Content-Type: application/json
+
+{
+  "refreshToken": "9b2c8f4a-3d5e-6f7a-8b9c-0d1e2f3a4b5c"
+}
+```
+</RequestExample>
+
+### Request body
+
+<ParamField body="refreshToken" type="string" required>
+  Current refresh token obtained from login or previous refresh
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable response message
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  New authentication token data
+  
+  <Expandable title="properties">
+    <ResponseField name="accessToken" type="string">
+      New JWT access token (old token is invalidated)
+    </ResponseField>
+    
+    <ResponseField name="refreshToken" type="string">
+      New refresh token (old token is invalidated)
+    </ResponseField>
+    
+    <ResponseField name="tokenType" type="string">
+      Token type (always "Bearer")
+    </ResponseField>
+    
+    <ResponseField name="expiresIn" type="integer">
+      Access token TTL in seconds
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="timestamp" type="string">
+  ISO 8601 timestamp of the response
+</ResponseField>
+
+<ResponseExample>
+```json 200 OK
+{
+  "success": true,
+  "message": "Token refreshed successfully",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+    "tokenType": "Bearer",
+    "expiresIn": 3600
+  },
+  "timestamp": "2026-03-03T11:30:00Z"
+}
+```
+
+```json 401 Unauthorized
+{
+  "success": false,
+  "message": "Invalid or expired refresh token",
+  "data": null,
+  "timestamp": "2026-03-03T11:30:00Z"
+}
+```
+</ResponseExample>
+
+---
+
+## Logout current session
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4001/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refreshToken": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:4001/auth/logout', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    refreshToken: '1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d'
+  })
+});
+
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'http://localhost:4001/auth/logout',
+    json={
+        'refreshToken': '1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d'
+    }
+)
+
+data = response.json()
+```
+</CodeGroup>
+
+<RequestExample>
+```http POST /auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+}
+```
+</RequestExample>
+
+### Request body
+
+<ParamField body="refreshToken" type="string" required>
+  Refresh token for the session to invalidate
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable response message
+</ResponseField>
+
+<ResponseField name="data" type="null">
+  No data returned for logout operations
+</ResponseField>
+
+<ResponseField name="timestamp" type="string">
+  ISO 8601 timestamp of the response
+</ResponseField>
+
+<ResponseExample>
+```json 200 OK
+{
+  "success": true,
+  "message": "Logged out successfully",
+  "data": null,
+  "timestamp": "2026-03-03T12:00:00Z"
+}
+```
+</ResponseExample>
+
+---
+
+## Logout from all devices
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4001/auth/logout-all \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:4001/auth/logout-all', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+  }
+});
+
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'http://localhost:4001/auth/logout-all',
+    headers={
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    }
+)
+
+data = response.json()
+```
+</CodeGroup>
+
+<RequestExample>
+```http POST /auth/logout-all
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+</RequestExample>
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication. Format: `Bearer <accessToken>`
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable response message
+</ResponseField>
+
+<ResponseField name="data" type="null">
+  No data returned for logout operations
+</ResponseField>
+
+<ResponseField name="timestamp" type="string">
+  ISO 8601 timestamp of the response
+</ResponseField>
+
+<ResponseExample>
+```json 200 OK
+{
+  "success": true,
+  "message": "Logged out from all devices",
+  "data": null,
+  "timestamp": "2026-03-03T12:00:00Z"
+}
+```
+
+```json 401 Unauthorized
+{
+  "success": false,
+  "message": "Invalid or expired token",
+  "data": null,
+  "timestamp": "2026-03-03T12:00:00Z"
+}
+```
+</ResponseExample>
+
+---
+
+## Get current authenticated user
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4001/auth/me \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:4001/auth/me', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+  }
+});
+
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'http://localhost:4001/auth/me',
+    headers={
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    }
+)
+
+data = response.json()
+```
+</CodeGroup>
+
+<RequestExample>
+```http GET /auth/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+</RequestExample>
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication. Format: `Bearer <accessToken>`
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable response message
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Current user profile data
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="integer">
+      Unique user identifier
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      User email address
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      User role. One of: `CUSTOMER`, `ADMIN`, `SUPER_ADMIN`, `VENDOR`
+    </ResponseField>
+    
+    <ResponseField name="accountStatus" type="string">
+      Account status. One of: `ACTIVE`, `LOCKED`, `SUSPENDED`
+    </ResponseField>
+    
+    <ResponseField name="emailVerified" type="boolean">
+      Whether the user's email has been verified
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of account creation
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of last account update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="timestamp" type="string">
+  ISO 8601 timestamp of the response
+</ResponseField>
+
+<ResponseExample>
+```json 200 OK
+{
+  "success": true,
+  "message": "Current user fetched successfully",
+  "data": {
+    "id": 12345,
+    "email": "customer@example.com",
+    "role": "CUSTOMER",
+    "accountStatus": "ACTIVE",
+    "emailVerified": true,
+    "createdAt": "2026-01-15T08:30:00Z",
+    "updatedAt": "2026-03-03T10:15:00Z"
+  },
+  "timestamp": "2026-03-03T12:00:00Z"
+}
+```
+
+```json 401 Unauthorized
+{
+  "success": false,
+  "message": "Invalid or expired token",
+  "data": null,
+  "timestamp": "2026-03-03T12:00:00Z"
+}
+```
+</ResponseExample>
+
+---
+
+## Change password for current user
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4001/auth/change-password \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "oldPassword": "SecurePass123!",
+    "newPassword": "NewSecurePass456!"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:4001/auth/change-password', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    oldPassword: 'SecurePass123!',
+    newPassword: 'NewSecurePass456!'
+  })
+});
+
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'http://localhost:4001/auth/change-password',
+    headers={
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    },
+    json={
+        'oldPassword': 'SecurePass123!',
+        'newPassword': 'NewSecurePass456!'
+    }
+)
+
+data = response.json()
+```
+</CodeGroup>
+
+<RequestExample>
+```http POST /auth/change-password
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "oldPassword": "SecurePass123!",
+  "newPassword": "NewSecurePass456!"
+}
+```
+</RequestExample>
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication. Format: `Bearer <accessToken>`
+</ParamField>
+
+### Request body
+
+<ParamField body="oldPassword" type="string" required>
+  Current password for verification
+</ParamField>
+
+<ParamField body="newPassword" type="string" required>
+  New password. Must be between 8 and 128 characters.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable response message
+</ResponseField>
+
+<ResponseField name="data" type="null">
+  No data returned for password change operations
+</ResponseField>
+
+<ResponseField name="timestamp" type="string">
+  ISO 8601 timestamp of the response
+</ResponseField>
+
+<ResponseExample>
+```json 200 OK
+{
+  "success": true,
+  "message": "Password changed successfully",
+  "data": null,
+  "timestamp": "2026-03-03T12:30:00Z"
+}
+```
+
+```json 400 Bad Request
+{
+  "success": false,
+  "message": "Invalid password payload",
+  "data": null,
+  "timestamp": "2026-03-03T12:30:00Z"
+}
+```
+
+```json 401 Unauthorized
+{
+  "success": false,
+  "message": "Old password is incorrect",
+  "data": null,
+  "timestamp": "2026-03-03T12:30:00Z"
+}
+```
+</ResponseExample>

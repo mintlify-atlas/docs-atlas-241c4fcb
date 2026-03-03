@@ -1,0 +1,285 @@
+---
+title: Testing strategies and commands
+description: Run tests across the QeetMart polyglot stack
+---
+
+## Testing philosophy
+
+QeetMart uses native testing frameworks for each runtime:
+
+- **Node.js**: Native Node.js test runner
+- **Java/Spring Boot**: JUnit with Maven
+- **Go**: Native Go test tooling
+
+All tests run in CI and should pass before merging code.
+
+## Test commands
+
+### Gateway tests (Node.js)
+
+The API Gateway uses Node.js native test runner:
+
+```bash
+pnpm test:gateway
+```
+
+This command:
+1. Builds TypeScript to JavaScript (`pnpm build`)
+2. Runs `node --test dist/**/*.test.js`
+
+Test files are located in:
+- `micros/api-gateway/src/utils/jwt.test.ts`
+- `micros/api-gateway/src/config/services.test.ts`
+
+### Spring Boot service tests
+
+<CodeGroup>
+```bash Auth Service
+pnpm test:auth-service
+```
+
+```bash User Service
+pnpm test:user-service
+```
+
+```bash Product Service
+pnpm test:product-service
+```
+</CodeGroup>
+
+These commands:
+- Change to the service directory (`cd micros/{service-name}`)
+- Run Maven Wrapper: `./mvnw -B test`
+- Execute JUnit tests with batch mode (`-B` flag)
+
+### Inventory service tests (Go)
+
+```bash
+pnpm test:inventory-service
+```
+
+This command:
+- Changes to `micros/inventory-service`
+- Sets custom Go cache: `GOCACHE=../../.cache/go-build`
+- Runs `go test ./...` to test all packages
+
+<Tip>
+The custom `GOCACHE` location keeps build artifacts in the monorepo cache directory for faster subsequent runs.
+</Tip>
+
+## Test structure
+
+### Node.js API Gateway
+
+The gateway uses TypeScript and Node.js native test runner. Example test structure:
+
+```typescript
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { verifyJwtHs256 } from './jwt.js';
+
+test('verifyJwtHs256 accepts valid token', () => {
+  const secret = 'test-secret-with-@-12345678901234567890';
+  const now = Math.floor(Date.now() / 1000);
+  const token = createToken(secret, {
+    sub: 'user-1',
+    iss: 'http://auth-service:4001',
+    exp: now + 60,
+  });
+
+  const claims = verifyJwtHs256(token, secret, 'http://auth-service:4001', 'qeetmart');
+  assert.equal(claims.sub, 'user-1');
+});
+```
+
+Key characteristics:
+- Co-located with source files (`.test.ts` extension)
+- Uses native Node.js `test` and `assert/strict`
+- Compiled to JavaScript before running
+
+### Spring Boot services
+
+Java services use JUnit 5 and Spring Boot Test:
+
+```java
+@SpringBootTest
+class AuthServiceTests {
+    @Test
+    void contextLoads() {
+        // Test implementation
+    }
+}
+```
+
+Tests are located in:
+- `micros/auth-service/src/test/java/`
+- `micros/user-service/src/test/java/`
+- `micros/product-service/src/test/java/`
+
+### Go inventory service
+
+Go tests use the standard `testing` package:
+
+```go
+func TestInventoryHandler(t *testing.T) {
+    // Test implementation
+}
+```
+
+Tests are located throughout the service in `*_test.go` files.
+
+## Running tests in CI
+
+The CI workflow (`.github/workflows/ci.yml`) runs all tests automatically:
+
+### Node.js jobs
+- Runs on path changes to Node.js services
+- Executes `pnpm test:gateway`
+- Builds and tests frontend apps
+
+### Java jobs
+- Uses matrix strategy for all Spring Boot services
+- Runs `./mvnw -B test` in each service directory
+- Tests against Java 17
+
+### Go jobs
+- Runs on inventory service changes
+- Executes `go test ./...`
+- Tests against Go 1.23+
+
+## Test coverage
+
+<Warning>
+Test coverage reporting is not currently configured. Consider adding coverage tools:
+- **Node.js**: c8 or built-in coverage
+- **Java**: JaCoCo
+- **Go**: `go test -cover`
+</Warning>
+
+## Writing new tests
+
+### Node.js/TypeScript
+
+<Steps>
+  <Step title="Create test file">
+    Create a file with `.test.ts` extension next to your source file.
+  </Step>
+
+  <Step title="Import test utilities">
+    ```typescript
+    import test from 'node:test';
+    import assert from 'node:assert/strict';
+    ```
+  </Step>
+
+  <Step title="Write test cases">
+    ```typescript
+    test('description of test', () => {
+      // Arrange
+      const input = 'test';
+      
+      // Act
+      const result = myFunction(input);
+      
+      // Assert
+      assert.equal(result, expected);
+    });
+    ```
+  </Step>
+
+  <Step title="Run tests">
+    ```bash
+    pnpm test:gateway
+    ```
+  </Step>
+</Steps>
+
+### Spring Boot
+
+<Steps>
+  <Step title="Create test class">
+    Create a test class in `src/test/java/` matching your package structure.
+  </Step>
+
+  <Step title="Add annotations">
+    ```java
+    @SpringBootTest
+    class MyServiceTest {
+        @Autowired
+        private MyService service;
+    }
+    ```
+  </Step>
+
+  <Step title="Write test methods">
+    ```java
+    @Test
+    void testMethodName() {
+        // Arrange, Act, Assert
+        assertEquals(expected, actual);
+    }
+    ```
+  </Step>
+
+  <Step title="Run tests">
+    ```bash
+    pnpm test:auth-service
+    ```
+  </Step>
+</Steps>
+
+### Go
+
+<Steps>
+  <Step title="Create test file">
+    Create a file with `_test.go` suffix in the same package.
+  </Step>
+
+  <Step title="Import testing package">
+    ```go
+    import "testing"
+    ```
+  </Step>
+
+  <Step title="Write test functions">
+    ```go
+    func TestMyFunction(t *testing.T) {
+        result := MyFunction(input)
+        if result != expected {
+            t.Errorf("got %v, want %v", result, expected)
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Run tests">
+    ```bash
+    pnpm test:inventory-service
+    ```
+  </Step>
+</Steps>
+
+## Integration testing
+
+Currently, QeetMart focuses on unit tests for individual services. Integration testing across the full stack is on the roadmap.
+
+<Tip>
+You can manually test service integration by:
+1. Running `pnpm docker:up`
+2. Using curl or Postman to test API endpoints
+3. Checking health endpoints for each service
+</Tip>
+
+## Test best practices
+
+- Write tests for new features before opening a PR
+- Ensure all tests pass locally before pushing
+- Keep tests focused on a single behavior
+- Use descriptive test names that explain the scenario
+- Mock external dependencies to keep tests fast
+- Don't commit commented-out tests
+
+## Next steps
+
+- Learn about [OpenAPI contract governance](/development/contracts)
+- Review [CI/CD workflows](/deployment/ci-cd)

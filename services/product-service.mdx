@@ -1,0 +1,414 @@
+---
+title: Product service
+description: Spring Boot product catalog management service
+---
+
+The Product service manages the product catalog for QeetMart, including products, categories, and product variants. It provides comprehensive product management with search and filtering capabilities.
+
+## Overview
+
+Built with Spring Boot 3.3.8, the product service handles product CRUD operations, categorization, variant management, and includes OpenAPI documentation via Swagger UI.
+
+<Note>
+The Product service runs on port **8083** by default and uses PostgreSQL for data persistence.
+</Note>
+
+## Technology stack
+
+- **Framework**: Spring Boot 3.3.8
+- **Language**: Java 17
+- **Database**: PostgreSQL
+- **Security**: Spring Security + OAuth2 Resource Server
+- **API Documentation**: SpringDoc OpenAPI 2.6.0
+- **Key dependencies**:
+  - Spring Data JPA
+  - Spring Security OAuth2 Resource Server
+  - Spring Boot Actuator
+  - Micrometer Prometheus
+  - Lombok
+
+## Configuration
+
+### Environment variables
+
+<ParamField path="SERVER_PORT" type="number" default="8083">
+  Server port
+</ParamField>
+
+### Database configuration
+
+<ParamField path="DB_HOST" type="string" default="localhost">
+  PostgreSQL host
+</ParamField>
+
+<ParamField path="DB_PORT" type="number" default="5432">
+  PostgreSQL port
+</ParamField>
+
+<ParamField path="DB_NAME" type="string" default="product_db">
+  Database name
+</ParamField>
+
+<ParamField path="DB_USERNAME" type="string" default="postgres">
+  Database username
+</ParamField>
+
+<ParamField path="DB_PASSWORD" type="string" required>
+  Database password
+</ParamField>
+
+<ParamField path="JPA_DDL_AUTO" type="string" default="validate">
+  Hibernate DDL auto (update for dev, validate for prod)
+</ParamField>
+
+### JWT configuration
+
+<ParamField path="JWT_SECRET" type="string" required>
+  JWT verification secret (must match auth-service)
+</ParamField>
+
+<ParamField path="JWT_ISSUER_URI" type="string" default="http://localhost:4001">
+  JWT issuer URI for validation
+</ParamField>
+
+## API endpoints
+
+### Product endpoints
+
+#### Create product (Admin only)
+
+<CodeGroup>
+```bash POST /products
+curl -X POST http://localhost:8083/products \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Wireless Headphones",
+    "description": "High-quality wireless headphones",
+    "brand": "TechBrand",
+    "categoryId": 1,
+    "price": 99.99,
+    "currency": "USD",
+    "status": "ACTIVE"
+  }'
+```
+
+```json Response
+{
+  "id": 1,
+  "name": "Wireless Headphones",
+  "description": "High-quality wireless headphones",
+  "brand": "TechBrand",
+  "categoryId": 1,
+  "categoryName": "Electronics",
+  "price": 99.99,
+  "currency": "USD",
+  "status": "ACTIVE",
+  "createdAt": "2026-03-03T10:00:00Z",
+  "updatedAt": "2026-03-03T10:00:00Z"
+}
+```
+</CodeGroup>
+
+#### Get products with filters
+
+<CodeGroup>
+```bash GET /products
+curl "http://localhost:8083/products?categoryId=1&brand=TechBrand&status=ACTIVE&page=0&size=10" \
+  -H "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "content": [
+    {
+      "id": 1,
+      "name": "Wireless Headphones",
+      "description": "High-quality wireless headphones",
+      "brand": "TechBrand",
+      "categoryId": 1,
+      "categoryName": "Electronics",
+      "price": 99.99,
+      "currency": "USD",
+      "status": "ACTIVE",
+      "createdAt": "2026-03-03T10:00:00Z",
+      "updatedAt": "2026-03-03T10:00:00Z"
+    }
+  ],
+  "page": 0,
+  "size": 10,
+  "totalElements": 1,
+  "totalPages": 1
+}
+```
+</CodeGroup>
+
+#### Get product by ID
+
+<CodeGroup>
+```bash GET /products/{productId}
+curl http://localhost:8083/products/1 \
+  -H "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "id": 1,
+  "name": "Wireless Headphones",
+  "description": "High-quality wireless headphones",
+  "brand": "TechBrand",
+  "categoryId": 1,
+  "categoryName": "Electronics",
+  "price": 99.99,
+  "currency": "USD",
+  "status": "ACTIVE",
+  "variants": [
+    {
+      "id": 1,
+      "sku": "WH-BLK-001",
+      "color": "Black",
+      "size": "One Size"
+    }
+  ],
+  "createdAt": "2026-03-03T10:00:00Z",
+  "updatedAt": "2026-03-03T10:00:00Z"
+}
+```
+</CodeGroup>
+
+#### Update product (Admin only)
+
+<CodeGroup>
+```bash PUT /products/{productId}
+curl -X PUT http://localhost:8083/products/1 \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Premium Wireless Headphones",
+    "price": 129.99,
+    "status": "ACTIVE"
+  }'
+```
+
+```json Response
+{
+  "id": 1,
+  "name": "Premium Wireless Headphones",
+  "description": "High-quality wireless headphones",
+  "brand": "TechBrand",
+  "price": 129.99,
+  "currency": "USD",
+  "status": "ACTIVE",
+  "updatedAt": "2026-03-03T10:30:00Z"
+}
+```
+</CodeGroup>
+
+#### Delete product (Admin only)
+
+<CodeGroup>
+```bash DELETE /products/{productId}
+curl -X DELETE http://localhost:8083/products/1 \
+  -H "Authorization: Bearer <admin-token>"
+```
+
+```json Response
+{
+  "message": "Product deleted successfully"
+}
+```
+</CodeGroup>
+
+<Note>
+Deletes are soft deletes - products are marked as deleted but not removed from the database.
+</Note>
+
+#### Search products
+
+<CodeGroup>
+```bash GET /products/search
+curl "http://localhost:8083/products/search?query=headphones" \
+  -H "Authorization: Bearer <token>"
+```
+
+```json Response
+[
+  {
+    "id": 1,
+    "name": "Wireless Headphones",
+    "brand": "TechBrand",
+    "price": 99.99,
+    "currency": "USD"
+  }
+]
+```
+</CodeGroup>
+
+### Category endpoints
+
+The service provides full CRUD operations for product categories. See CategoryController for details.
+
+### Product variant endpoints
+
+Manage product variants (different colors, sizes, SKUs) via ProductVariantController.
+
+## Data models
+
+### Product entity
+
+<CodeGroup>
+```java Product.java
+@Entity
+@Table(name = "products")
+public class Product extends BaseAuditEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, length = 150)
+    private String name;
+
+    @Column(length = 1000)
+    private String description;
+
+    @Column(nullable = false, length = 100)
+    private String brand;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "category_id", nullable = false)
+    private Category category;
+
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal price;
+
+    @Column(nullable = false, length = 3)
+    private String currency;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private ProductStatus status; // ACTIVE, INACTIVE, OUT_OF_STOCK
+
+    @Column(name = "is_deleted", nullable = false)
+    private boolean isDeleted = false;
+
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL)
+    private List<ProductVariant> variants = new ArrayList<>();
+}
+```
+</CodeGroup>
+
+### Product status enum
+
+- `ACTIVE` - Product is available for purchase
+- `INACTIVE` - Product is not currently available
+- `OUT_OF_STOCK` - Product is temporarily unavailable
+
+## OpenAPI documentation
+
+Swagger UI is available for interactive API exploration:
+
+<CodeGroup>
+```bash Access Swagger UI
+open http://localhost:8083/swagger-ui.html
+```
+
+```bash OpenAPI JSON
+curl http://localhost:8083/v3/api-docs
+```
+</CodeGroup>
+
+## Health check
+
+<CodeGroup>
+```bash GET /actuator/health
+curl http://localhost:8083/actuator/health
+```
+
+```json Response
+{
+  "status": "UP",
+  "groups": [
+    "liveness",
+    "readiness"
+  ]
+}
+```
+</CodeGroup>
+
+## Metrics
+
+Prometheus metrics are available at `/actuator/prometheus`.
+
+## Running the service
+
+<CodeGroup>
+```bash Maven
+cd product-service
+mvn spring-boot:run
+```
+
+```bash Production
+mvn clean package
+java -jar target/product-service-0.0.1-SNAPSHOT.jar
+```
+</CodeGroup>
+
+## Search and filtering
+
+The service uses Spring Data JPA Specifications for dynamic filtering:
+
+<CodeGroup>
+```java ProductSpecification.java
+public static Specification<Product> withFilters(
+    Long categoryId,
+    String brand,
+    ProductStatus status
+) {
+    return (root, query, cb) -> {
+        List<Predicate> predicates = new ArrayList<>();
+        
+        if (categoryId != null) {
+            predicates.add(cb.equal(root.get("category").get("id"), categoryId));
+        }
+        
+        if (brand != null) {
+            predicates.add(cb.equal(root.get("brand"), brand));
+        }
+        
+        if (status != null) {
+            predicates.add(cb.equal(root.get("status"), status));
+        }
+        
+        predicates.add(cb.equal(root.get("isDeleted"), false));
+        
+        return cb.and(predicates.toArray(new Predicate[0]));
+    };
+}
+```
+</CodeGroup>
+
+## Authorization
+
+- **Public access**: GET endpoints for browsing products
+- **Admin only**: POST, PUT, DELETE operations require ADMIN role
+
+<Warning>
+Ensure the `JWT_SECRET` matches the secret used in the auth-service for proper token validation.
+</Warning>
+
+## Dependencies
+
+- **PostgreSQL**: For product catalog storage
+- **Auth service**: For JWT token validation
+- **Inventory service**: For stock level integration
+
+## Source code
+
+Location: `~/workspace/source/micros/product-service/`
+
+Key files:
+- `src/main/java/com/qeetmart/product/controller/ProductController.java` - Product endpoints
+- `src/main/java/com/qeetmart/product/controller/CategoryController.java` - Category endpoints
+- `src/main/java/com/qeetmart/product/entity/Product.java` - Product entity
+- `src/main/java/com/qeetmart/product/specification/ProductSpecification.java` - Search filters
+- `src/main/resources/application.yml` - Configuration

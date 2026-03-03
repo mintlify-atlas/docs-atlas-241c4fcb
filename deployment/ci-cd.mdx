@@ -1,0 +1,465 @@
+---
+title: CI/CD pipeline and workflows
+description: Automated continuous integration and deployment workflows for QeetMart using GitHub Actions
+---
+
+QeetMart uses GitHub Actions for continuous integration and deployment. The CI/CD pipelines automate testing, building, validation, and deployment across multiple environments.
+
+## Pipeline overview
+
+The CI/CD system consists of two main workflows:
+
+- **CI Workflow**: Runs on pull requests and main branch commits
+- **Deploy Workflow**: Manual deployment to dev, staging, or production
+
+## Continuous integration workflow
+
+The CI workflow (`.github/workflows/ci.yml`) runs automated tests and validations on every pull request and push to main.
+
+### Workflow triggers
+
+```yaml
+on:
+  pull_request:
+  push:
+    branches: [main]
+```
+
+### Path-based filtering
+
+The workflow uses intelligent path filtering to run only relevant jobs:
+
+```yaml
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      node: ${{ steps.filter.outputs.node }}
+      java: ${{ steps.filter.outputs.java }}
+      go: ${{ steps.filter.outputs.go }}
+      contracts: ${{ steps.filter.outputs.contracts }}
+      platform: ${{ steps.filter.outputs.platform }}
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            node:
+              - 'apps/**'
+              - 'packages/**'
+              - 'micros/api-gateway/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+            java:
+              - 'micros/auth-service/**'
+              - 'micros/user-service/**'
+              - 'micros/product-service/**'
+            go:
+              - 'micros/inventory-service/**'
+            platform:
+              - 'platform/**'
+              - 'helm/**'
+```
+
+This ensures that only affected services are tested, reducing CI time and resource usage.
+
+## CI jobs
+
+### Node.js build and test
+
+<Steps>
+  <Step title="Setup environment">
+    Installs Node.js 22 and pnpm 10:
+
+    ```yaml
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 10
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: pnpm
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```yaml
+    - run: pnpm install --frozen-lockfile
+    ```
+  </Step>
+
+  <Step title="Build and test">
+    ```yaml
+    - run: pnpm --filter @qeetmart/shared build
+    - run: pnpm --filter @qeetmart/api-gateway build
+    - run: pnpm --filter @qeetmart/api-gateway test
+    - run: pnpm --filter web build
+    - run: pnpm --filter admin build
+    - run: pnpm --filter admin bundle:check
+    ```
+  </Step>
+</Steps>
+
+### Java service testing
+
+Tests all Java Spring Boot services using a matrix strategy:
+
+```yaml
+java-test:
+  runs-on: ubuntu-latest
+  needs: changes
+  if: needs.changes.outputs.java == 'true'
+  strategy:
+    fail-fast: false
+    matrix:
+      service: [auth-service, user-service, product-service]
+  defaults:
+    run:
+      working-directory: micros/${{ matrix.service }}
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+        cache: maven
+    - run: ./mvnw -B test
+```
+
+This runs tests for all three Java services in parallel.
+
+### Go service testing
+
+Tests the inventory service written in Go:
+
+```yaml
+go-test:
+  runs-on: ubuntu-latest
+  needs: changes
+  if: needs.changes.outputs.go == 'true'
+  defaults:
+    run:
+      working-directory: micros/inventory-service
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+        cache-dependency-path: micros/inventory-service/go.sum
+    - run: go test ./...
+```
+
+### OpenAPI contract validation
+
+Validates API contracts and checks for breaking changes:
+
+```yaml
+contract-check:
+  runs-on: ubuntu-latest
+  needs: changes
+  if: needs.changes.outputs.contracts == 'true'
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    - run: node tools/ci/openapi-lint.mjs
+    - run: node tools/ci/openapi-breaking.mjs
+```
+
+<Note>
+  Contract validation with `fetch-depth: 0` enables comparison against previous versions to detect breaking changes.
+</Note>
+
+### Documentation validation
+
+Ensures documentation is up-to-date and builds correctly:
+
+```yaml
+docs-check:
+  runs-on: ubuntu-latest
+  needs: changes
+  if: needs.changes.outputs.docs == 'true'
+  steps:
+    - uses: actions/checkout@v4
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 10
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: pnpm
+    - run: pnpm install --frozen-lockfile
+    - run: pnpm docs:drift:check
+    - run: pnpm docs:validate
+    - run: pnpm --filter docs build
+```
+
+### Platform validation
+
+Validates Kubernetes manifests and Helm charts:
+
+```yaml
+platform-validate:
+  runs-on: ubuntu-latest
+  needs: changes
+  if: needs.changes.outputs.platform == 'true'
+  steps:
+    - uses: actions/checkout@v4
+    - uses: azure/setup-helm@v4
+    - uses: imranismail/setup-kustomize@v2
+    - run: helm lint helm/qeetmart
+    - run: kustomize build platform/k8s/overlays/dev > /tmp/kustomize-dev.yaml
+    - run: kustomize build platform/k8s/overlays/staging > /tmp/kustomize-staging.yaml
+    - run: kustomize build platform/k8s/overlays/prod > /tmp/kustomize-prod.yaml
+```
+
+This ensures all Kubernetes configurations are valid before deployment.
+
+## Deployment workflow
+
+The deployment workflow (`.github/workflows/deploy.yml`) provides manual deployment control.
+
+### Workflow dispatch
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      image_tag:
+        description: 'Image tag to deploy (for example, sha-abc1234)'
+        required: true
+        type: string
+```
+
+This creates a manual workflow with environment and image tag selection.
+
+### Deployment job
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deployment input
+        run: |
+          test -n "${{ inputs.image_tag }}"
+      - name: Deployment placeholder
+        run: |
+          echo "Deploying tag ${{ inputs.image_tag }} to ${{ inputs.environment }}"
+          echo "Hook this job to Argo CD or Helm release automation."
+```
+
+<Warning>
+  The deploy workflow is a placeholder. Integrate it with your deployment tool (Argo CD, Flux, or Helm) for production use.
+</Warning>
+
+## Running workflows
+
+### Automatic CI runs
+
+CI runs automatically on:
+
+- Every pull request
+- Every push to main branch
+
+View results in the GitHub Actions tab.
+
+### Manual deployment
+
+<Steps>
+  <Step title="Navigate to Actions">
+    Go to the repository's Actions tab on GitHub.
+  </Step>
+
+  <Step title="Select Deploy workflow">
+    Click on "Deploy" in the workflows list.
+  </Step>
+
+  <Step title="Run workflow">
+    Click "Run workflow" and select:
+    - Target environment (dev, staging, or prod)
+    - Image tag to deploy (e.g., `sha-abc1234` or `v1.0.0`)
+  </Step>
+
+  <Step title="Monitor deployment">
+    Watch the deployment progress in the workflow run details.
+  </Step>
+</Steps>
+
+## Environment protection
+
+Configure environment protection rules in GitHub:
+
+<CodeGroup>
+```yaml Development
+# No protection rules
+# Auto-deploy on merge to main
+```
+
+```yaml Staging
+# Require reviewers: 1
+# Allow specific branches: main, release/*
+```
+
+```yaml Production
+# Require reviewers: 2
+# Allow specific branches: main
+# Wait timer: 5 minutes
+```
+</CodeGroup>
+
+## CI/CD best practices
+
+### Branch protection
+
+Configure branch protection on `main`:
+
+- Require pull request reviews
+- Require status checks to pass
+- Require branches to be up to date
+- Require conversation resolution
+
+### Caching strategy
+
+The workflows use action-native caching:
+
+```yaml
+- uses: actions/setup-node@v4
+  with:
+    cache: pnpm
+
+- uses: actions/setup-java@v4
+  with:
+    cache: maven
+
+- uses: actions/setup-go@v5
+  with:
+    cache-dependency-path: micros/inventory-service/go.sum
+```
+
+This significantly speeds up workflow execution.
+
+### Matrix builds
+
+Use matrix strategies for testing multiple services:
+
+```yaml
+strategy:
+  fail-fast: false
+  matrix:
+    service: [auth-service, user-service, product-service]
+```
+
+Set `fail-fast: false` to see all failures, not just the first.
+
+## Integration with deployment tools
+
+### Argo CD integration
+
+Update the deploy job to sync with Argo CD:
+
+```yaml
+- name: Deploy with Argo CD
+  run: |
+    argocd app set qeetmart-${{ inputs.environment }} \
+      --parameter image.tag=${{ inputs.image_tag }}
+    argocd app sync qeetmart-${{ inputs.environment }}
+    argocd app wait qeetmart-${{ inputs.environment }}
+```
+
+### Helm deployment
+
+Deploy using Helm:
+
+```yaml
+- name: Deploy with Helm
+  run: |
+    helm upgrade --install qeetmart ./helm/qeetmart \
+      -n ${{ inputs.environment }} \
+      --set global.imageTag=${{ inputs.image_tag }} \
+      -f values-${{ inputs.environment }}.yaml
+```
+
+### Kubectl with Kustomize
+
+Deploy using kubectl and Kustomize:
+
+```yaml
+- name: Deploy with Kustomize
+  run: |
+    cd platform/k8s/overlays/${{ inputs.environment }}
+    kustomize edit set image api-gateway=ghcr.io/qeetgroup/qeetmart/api-gateway:${{ inputs.image_tag }}
+    kubectl apply -k .
+```
+
+## Monitoring and notifications
+
+### GitHub Status Checks
+
+All CI jobs appear as status checks on pull requests, blocking merge if they fail.
+
+### Slack notifications
+
+Add Slack notifications for deployment events:
+
+```yaml
+- name: Notify Slack
+  if: always()
+  uses: slackapi/slack-github-action@v1
+  with:
+    payload: |
+      {
+        "environment": "${{ inputs.environment }}",
+        "tag": "${{ inputs.image_tag }}",
+        "status": "${{ job.status }}"
+      }
+  env:
+    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
+
+## Troubleshooting
+
+### Job skipped due to path filtering
+
+If changes don't trigger expected jobs, check the path filters match your modified files.
+
+### Cache invalidation
+
+To clear workflow caches:
+
+1. Go to Actions tab
+2. Click "Caches" in the sidebar
+3. Delete outdated caches
+
+### Failed deployments
+
+Check deployment logs:
+
+```bash
+gh run view <run-id> --log
+```
+
+Rerun failed jobs:
+
+```bash
+gh run rerun <run-id> --failed
+```
+
+<Note>
+  The CI/CD configuration is designed to be extended. Customize workflows to integrate with your specific infrastructure and deployment requirements.
+</Note>

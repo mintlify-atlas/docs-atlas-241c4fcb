@@ -1,0 +1,261 @@
+---
+title: Local development workflow
+description: Learn how to run, build, and work with QeetMart services locally
+---
+
+## Development commands
+
+QeetMart provides pnpm scripts for running services individually or in combination. All commands are executed from the repository root.
+
+### Running services
+
+<CodeGroup>
+```bash Full stack
+pnpm dev
+```
+
+```bash API Gateway only
+pnpm dev:gateway
+```
+
+```bash Web app only
+pnpm dev:web
+```
+
+```bash Admin app only
+pnpm dev:admin
+```
+
+```bash Mobile app
+pnpm dev:mobile
+```
+
+```bash Documentation portal
+pnpm dev:docs
+```
+</CodeGroup>
+
+### What `pnpm dev` runs
+
+The main `dev` command runs these services in parallel:
+
+- `@qeetmart/shared` (shared package)
+- `@qeetmart/api-gateway` (Node.js gateway)
+- `web` (Next.js customer app)
+- `admin` (React admin app)
+
+```bash
+pnpm dev
+```
+
+## Build commands
+
+### Build all services
+
+Build the entire platform in the correct dependency order:
+
+```bash
+pnpm build
+```
+
+This runs:
+1. `pnpm build:shared`
+2. `pnpm build:gateway`
+3. `pnpm build:web`
+4. `pnpm build:admin`
+5. `pnpm build:docs`
+
+### Build individual services
+
+<CodeGroup>
+```bash Gateway
+pnpm build:gateway
+```
+
+```bash Shared package
+pnpm build:shared
+```
+
+```bash Web app
+pnpm build:web
+```
+
+```bash Admin app
+pnpm build:admin
+```
+
+```bash Documentation
+pnpm build:docs
+```
+
+```bash Auth service (Java)
+pnpm build:auth-service
+```
+</CodeGroup>
+
+<Tip>
+The `build:auth-service` command uses Maven Wrapper and skips tests with `-DskipTests` for faster builds.
+</Tip>
+
+## Spring Boot services
+
+### Development mode
+
+Run the auth service in development mode with hot reload:
+
+```bash
+pnpm dev:auth-service
+```
+
+This command:
+- Changes directory to `micros/auth-service`
+- Loads environment variables from `.env` if present
+- Runs `./mvnw spring-boot:run`
+
+### Production mode
+
+Start the auth service from the built JAR:
+
+```bash
+pnpm start:auth-service
+```
+
+## Mobile development
+
+### Platform-specific commands
+
+<CodeGroup>
+```bash Android
+pnpm mobile:android
+```
+
+```bash iOS
+pnpm mobile:ios
+```
+
+```bash Web
+pnpm mobile:web
+```
+</CodeGroup>
+
+### Linting and type checking
+
+```bash
+pnpm lint:mobile
+pnpm typecheck:mobile
+```
+
+## Docker workflow
+
+### Start full backend
+
+Launch all microservices and databases:
+
+```bash
+pnpm docker:up
+```
+
+This uses `docker-compose.dev.yml` with `--build` flag to rebuild images.
+
+### Stop and clean up
+
+Stop all services and remove volumes:
+
+```bash
+pnpm docker:down
+```
+
+This removes all data from databases and caches.
+
+<Warning>
+The `docker:down` command includes the `-v` flag, which deletes all volumes. Any data in local databases will be lost.
+</Warning>
+
+## Web development tips
+
+### Clean Next.js cache
+
+If you encounter Next.js caching issues:
+
+```bash
+pnpm dev:web:clean
+```
+
+This command:
+- Kills any running Next.js processes
+- Removes the `.next` build cache
+- Starts a fresh development server
+
+## Documentation commands
+
+QeetMart includes several documentation automation commands:
+
+<CodeGroup>
+```bash Sync OpenAPI specs
+pnpm docs:sync:openapi
+```
+
+```bash Sync README files
+pnpm docs:sync:readmes
+```
+
+```bash Generate search index
+pnpm docs:search:index
+```
+
+```bash Check for drift
+pnpm docs:drift:check
+```
+
+```bash Validate content
+pnpm docs:validate
+```
+
+```bash Generate API clients
+pnpm docs:generate:clients
+```
+</CodeGroup>
+
+## Service architecture
+
+```text
+Clients
+  ├─ Next.js Web (apps/web)
+  ├─ Admin SPA (apps/admin)
+  └─ Expo Mobile (apps/mobile)
+        │
+        ▼
+API Gateway (micros/api-gateway :4000)
+  ├─ Auth Service (Spring Boot :4001)     -> Postgres (auth_db)
+  ├─ User Service (Spring Boot :8082)     -> Postgres (user_db)
+  ├─ Product Service (Spring Boot :8083)  -> Postgres (product_db)
+  └─ Inventory Service (Go/Gin :8080)     -> Postgres (inventory) + Redis
+```
+
+## Monorepo structure
+
+| Path | Purpose |
+| --- | --- |
+| `apps/web` | Customer-facing Next.js app |
+| `apps/admin` | Admin React app (Vite) |
+| `apps/mobile` | Expo mobile app |
+| `apps/docs` | Documentation portal |
+| `micros/api-gateway` | Node.js Express gateway |
+| `micros/auth-service` | Spring Boot auth service |
+| `micros/user-service` | Spring Boot user service |
+| `micros/product-service` | Spring Boot product service |
+| `micros/inventory-service` | Go inventory service |
+| `packages/shared` | Shared workspace package |
+| `packages/openapi-clients` | Generated TypeScript clients |
+
+## Hot reload behavior
+
+- **Node.js/TypeScript**: Uses `tsx watch` for instant reload
+- **Spring Boot**: Uses `spring-boot:run` with DevTools for reload
+- **Go**: Manual restart required (no hot reload in current setup)
+- **Next.js/React**: Vite and Next.js provide built-in HMR
+
+## Next steps
+
+- Learn about [testing strategies](/development/testing)
+- Understand [OpenAPI contract governance](/development/contracts)

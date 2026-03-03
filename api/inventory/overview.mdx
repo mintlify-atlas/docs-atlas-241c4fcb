@@ -1,0 +1,121 @@
+---
+title: Inventory API overview
+description: Manage product inventory, stock levels, and reservations for QeetMart orders
+---
+
+The Inventory Service API provides endpoints for managing product stock levels and handling inventory reservations during the order fulfillment process.
+
+## Base URL
+
+```
+http://localhost:8080
+```
+
+## Key features
+
+The Inventory API supports the following operations:
+
+- **Stock management** - Initialize inventory, view stock levels, and add stock for products
+- **Reservations** - Reserve inventory for pending orders with automatic expiration
+- **Reservation lifecycle** - Release or deduct reserved stock based on order outcomes
+- **Health monitoring** - Check service and database connectivity
+
+## Architecture
+
+### Database
+
+The service uses PostgreSQL to store:
+
+- **inventory_stock** - Product stock levels with available and reserved quantities
+- **inventory_reservations** - Active, released, and deducted reservations
+
+### Redis caching
+
+The service implements Redis caching for reservation data to improve performance:
+
+- Reservations are cached upon creation with the same TTL as the database record
+- Cache key format: `reservation:{reservationId}`
+- Cache is checked before database queries in release and deduct operations
+- Cache entries are automatically deleted when reservations are released or deducted
+
+### Transaction management
+
+All stock modifications use database transactions with row-level locking (`FOR UPDATE`) to prevent race conditions:
+
+- Adding stock acquires a lock on the product row
+- Reserving stock locks both the product row and creates a reservation record
+- Releasing and deducting stock lock both the reservation and product rows
+
+### Reservation expiration
+
+Reservations automatically expire to prevent inventory from being locked indefinitely:
+
+- Each reservation has an `expiresAt` timestamp set during creation
+- A background worker periodically checks for expired reservations
+- Expired reservations are automatically released, returning stock to the available pool
+- The worker processes up to 100 expired reservations per interval
+
+## Reservation states
+
+Reservations follow a strict state machine:
+
+- **RESERVED** - Initial state when stock is reserved for an order
+- **RELEASED** - Stock returned to available pool (order cancelled/failed)
+- **DEDUCTED** - Stock permanently removed (order completed successfully)
+
+State transitions are enforced at the service layer:
+
+- RESERVED → RELEASED (via `/inventory/release`)
+- RESERVED → DEDUCTED (via `/inventory/deduct`)
+- RELEASED and DEDUCTED are terminal states and cannot be changed
+
+## Error handling
+
+The API uses structured error responses with specific error codes:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INSUFFICIENT_STOCK",
+    "message": "not enough available stock"
+  }
+}
+```
+
+### Common error codes
+
+| Code | Description | HTTP Status |
+|------|-------------|-------------|
+| `VALIDATION_ERROR` | Invalid request parameters | 400 |
+| `INVALID_PRODUCT_ID` | Missing or empty product ID | 400 |
+| `INVALID_ORDER_ID` | Missing or empty order ID | 400 |
+| `INVALID_QUANTITY` | Quantity is zero, negative, or missing | 400 |
+| `INVALID_RESERVATION_ID` | Missing or empty reservation ID | 400 |
+| `PRODUCT_NOT_FOUND` | Inventory record not found | 404 |
+| `RESERVATION_NOT_FOUND` | Reservation not found | 404 |
+| `INSUFFICIENT_STOCK` | Not enough available stock | 409 |
+| `RESERVATION_ALREADY_RELEASED` | Reservation already in RELEASED state | 409 |
+| `RESERVATION_ALREADY_DEDUCTED` | Reservation already in DEDUCTED state | 409 |
+| `INVALID_STOCK_STATE` | Reserved quantity less than reservation | 409 |
+| `INTERNAL_ERROR` | Unexpected server error | 500 |
+
+## Success responses
+
+All successful responses follow this structure:
+
+```json
+{
+  "success": true,
+  "message": "descriptive message",
+  "data": {
+    // Response-specific data
+  }
+}
+```
+
+## Next steps
+
+<Card title="Endpoint reference" icon="code" href="/api/inventory/endpoints">
+  Detailed documentation for all Inventory API endpoints
+</Card>

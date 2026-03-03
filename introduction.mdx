@@ -1,0 +1,149 @@
+---
+title: Introduction to QeetMart
+description: Production-grade polyglot eCommerce platform built as a monorepo with Node.js, Spring Boot, Go, and modern frontend frameworks
+---
+
+# Introduction to QeetMart
+
+QeetMart is a production-grade polyglot eCommerce platform that demonstrates modern microservices architecture, contract-first API design, and best practices for building scalable distributed systems.
+
+<Note>
+Built with Node.js, Java Spring Boot, Go, Next.js, and Expo in a unified monorepo managed by pnpm workspaces.
+</Note>
+
+## Platform vision
+
+QeetMart is designed to:
+
+- Deliver scalable eCommerce capabilities via independently deployable services
+- Keep APIs stable through contract-first governance with OpenAPI specifications
+- Support fast onboarding for engineers across Node, Java, Go, and React/Expo stacks
+- Provide production-grade platform controls including CI policy, deployment validation, and docs operations
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Microservices architecture" icon="diagram-project" href="/architecture">
+    Five specialized services with dedicated databases, coordinated through an API Gateway
+  </Card>
+  
+  <Card title="Contract-first APIs" icon="file-contract">
+    OpenAPI 3.0 specifications with automated breaking change detection and TypeScript client generation
+  </Card>
+  
+  <Card title="Multi-language runtime" icon="code">
+    Node.js Gateway, Spring Boot services, Go inventory service with PostgreSQL and Redis
+  </Card>
+  
+  <Card title="Modern frontends" icon="browser">
+    Next.js web app, Vite React admin panel, and Expo mobile app consuming unified APIs
+  </Card>
+  
+  <Card title="Docker local dev" icon="docker">
+    Complete backend stack runs with `pnpm docker:up` - databases, services, and networking configured
+  </Card>
+  
+  <Card title="Kubernetes ready" icon="dharmachakra">
+    Kustomize manifests and Helm charts for dev, staging, and production deployments
+  </Card>
+</CardGroup>
+
+## Technology stack
+
+<CardGroup cols={3}>
+  <Card title="Backend" icon="server">
+    - Node.js 22.x + TypeScript
+    - Java 17 + Spring Boot
+    - Go 1.23+ + Gin
+    - PostgreSQL 16
+    - Redis 7.2
+  </Card>
+  
+  <Card title="Frontend" icon="window">
+    - Next.js 16 + React 19
+    - Vite + React
+    - Expo + React Native
+    - TanStack Query
+    - Tailwind CSS 4
+  </Card>
+  
+  <Card title="Platform" icon="wrench">
+    - pnpm workspaces
+    - Docker Compose
+    - Kubernetes + Helm
+    - GitHub Actions CI/CD
+    - OpenAPI governance
+  </Card>
+</CardGroup>
+
+## Architecture at a glance
+
+```text
+Clients
+  ├─ Next.js Web (apps/web)
+  ├─ Admin SPA (apps/admin)
+  └─ Expo Mobile (apps/mobile)
+        │
+        ▼
+API Gateway (Node.js :4000)
+  ├─ Auth Service (Spring Boot :4001)     -> Postgres (auth_db)
+  ├─ User Service (Spring Boot :8082)     -> Postgres (user_db)
+  ├─ Product Service (Spring Boot :8083)  -> Postgres (product_db)
+  └─ Inventory Service (Go :8080)         -> Postgres + Redis
+```
+
+<CardGroup cols={2}>
+  <Card title="Get started" icon="rocket" href="/quickstart">
+    Get QeetMart running locally in 15 minutes
+  </Card>
+  
+  <Card title="Architecture deep dive" icon="sitemap" href="/architecture">
+    Understand the microservices design and data flow
+  </Card>
+</CardGroup>
+
+## Service catalog
+
+| Service | Runtime | Port | Purpose |
+| --- | --- | --- | --- |
+| **API Gateway** | Node.js + Express | 4000 | Request routing, auth, rate limiting |
+| **Auth Service** | Spring Boot | 4001 | JWT authentication and authorization |
+| **User Service** | Spring Boot | 8082 | User profile management |
+| **Product Service** | Spring Boot | 8083 | Product catalog and search |
+| **Inventory Service** | Go + Gin | 8080 | Stock tracking with Redis caching |
+
+## What's next?
+
+<Steps>
+  <Step title="Quick start">
+    Follow the [quickstart guide](/quickstart) to run the platform locally in minutes
+  </Step>
+  
+  <Step title="Explore the architecture">
+    Read the [architecture overview](/architecture) to understand how services communicate
+  </Step>
+  
+  <Step title="Start building">
+    Check out the API references and start integrating with QeetMart services
+  </Step>
+</Steps>
+
+<Warning>
+The default `.env.example` files contain development credentials. Never use these in staging or production environments. Rotate all secrets and use environment-specific secret managers.
+</Warning>
+
+## Repository structure
+
+QeetMart uses a monorepo layout for unified dependency management and coordinated releases:
+
+- `apps/` - Frontend applications (web, admin, mobile, docs)
+- `micros/` - Backend microservices (gateway and domain services)
+- `packages/` - Shared workspace packages and generated API clients
+- `contracts/openapi/` - OpenAPI specification source of truth
+- `platform/k8s/` - Kubernetes deployment manifests
+- `helm/qeetmart/` - Helm chart for orchestrated deployments
+- `tools/ci/` - Contract governance and CI automation scripts
+
+## License
+
+MIT License - see [LICENSE](https://github.com/qeetgroup/qeetmart/blob/main/LICENSE) for details.

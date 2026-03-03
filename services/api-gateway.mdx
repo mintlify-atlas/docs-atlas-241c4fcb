@@ -1,0 +1,322 @@
+---
+title: API Gateway
+description: Node.js/Express API Gateway for QeetMart microservices
+---
+
+The API Gateway is a Node.js/Express service that acts as the single entry point for all client requests to the QeetMart microservices architecture. It handles request routing, authentication, rate limiting, and CORS.
+
+## Overview
+
+The gateway proxies requests to downstream services and provides cross-cutting concerns like security, logging, and service health monitoring.
+
+<Note>
+The API Gateway runs on port **4000** by default and routes requests to all backend microservices.
+</Note>
+
+## Technology stack
+
+- **Runtime**: Node.js
+- **Framework**: Express 4.21.1
+- **Language**: TypeScript
+- **Key dependencies**:
+  - `http-proxy-middleware` - Request proxying
+  - `express-rate-limit` - Rate limiting
+  - `helmet` - Security headers
+  - `cors` - CORS handling
+  - `zod` - Schema validation
+
+## Configuration
+
+### Environment variables
+
+<ParamField path="PORT" type="number" default="4000">
+  Server port
+</ParamField>
+
+<ParamField path="HOST" type="string" default="0.0.0.0">
+  Server host address
+</ParamField>
+
+<ParamField path="TRUST_PROXY" type="boolean" default="false">
+  Enable when deployed behind a reverse proxy
+</ParamField>
+
+<ParamField path="CORS_ORIGINS" type="string" default="http://localhost:3000,...">
+  Comma-separated list of allowed origins
+</ParamField>
+
+<ParamField path="CORS_CREDENTIALS" type="boolean" default="true">
+  Allow credentials in CORS requests
+</ParamField>
+
+<ParamField path="REQUIRE_AUTH" type="boolean" default="true">
+  Enforce JWT authentication on all routes
+</ParamField>
+
+<ParamField path="JWT_SECRET" type="string" required>
+  Secret key for JWT verification (must match auth-service)
+</ParamField>
+
+<ParamField path="JWT_ISSUER" type="string" default="http://localhost:4001">
+  Expected JWT issuer URI
+</ParamField>
+
+<ParamField path="JWT_AUDIENCE" type="string">
+  Expected JWT audience (optional)
+</ParamField>
+
+<ParamField path="RATE_LIMIT_WINDOW_MS" type="number" default="60000">
+  Rate limit window in milliseconds
+</ParamField>
+
+<ParamField path="RATE_LIMIT_MAX" type="number" default="1000">
+  Maximum requests per window
+</ParamField>
+
+<ParamField path="GATEWAY_PROXY_TIMEOUT_MS" type="number" default="5000">
+  Proxy request timeout in milliseconds
+</ParamField>
+
+### Downstream service URLs
+
+<ParamField path="AUTH_SERVICE_URL" type="string" default="http://localhost:4001">
+  Auth service base URL
+</ParamField>
+
+<ParamField path="USER_SERVICE_URL" type="string" default="http://localhost:8082">
+  User service base URL
+</ParamField>
+
+<ParamField path="PRODUCT_SERVICE_URL" type="string" default="http://localhost:8083">
+  Product service base URL
+</ParamField>
+
+<ParamField path="ORDER_SERVICE_URL" type="string" default="http://localhost:8084">
+  Order service base URL
+</ParamField>
+
+<ParamField path="PAYMENT_SERVICE_URL" type="string" default="http://localhost:8085">
+  Payment service base URL
+</ParamField>
+
+<ParamField path="INVENTORY_SERVICE_URL" type="string" default="http://localhost:8080">
+  Inventory service base URL
+</ParamField>
+
+## API endpoints
+
+### Health check
+
+<CodeGroup>
+```bash GET /health
+curl http://localhost:4000/health
+```
+
+```json Response
+{
+  "status": "ok",
+  "service": "api-gateway",
+  "timestamp": "2026-03-03T10:30:00.000Z"
+}
+```
+</CodeGroup>
+
+### Service health check
+
+<CodeGroup>
+```bash GET /health/services
+curl http://localhost:4000/health/services
+```
+
+```json Response
+{
+  "status": "ok",
+  "services": [
+    {
+      "name": "auth-service",
+      "status": "healthy",
+      "responseTime": 45
+    },
+    {
+      "name": "user-service",
+      "status": "healthy",
+      "responseTime": 32
+    }
+  ],
+  "timestamp": "2026-03-03T10:30:00.000Z"
+}
+```
+</CodeGroup>
+
+### Gateway info
+
+<CodeGroup>
+```bash GET /info
+curl http://localhost:4000/info
+```
+
+```json Response
+{
+  "name": "Qeetmart API Gateway",
+  "version": "0.0.1",
+  "services": [
+    {
+      "name": "auth-service",
+      "baseUrl": "http://localhost:4001"
+    },
+    {
+      "name": "user-service",
+      "baseUrl": "http://localhost:8082"
+    }
+  ],
+  "timestamp": "2026-03-03T10:30:00.000Z"
+}
+```
+</CodeGroup>
+
+## Route mapping
+
+The gateway maps API paths to downstream services:
+
+| Client Path | Downstream Service | Upstream Path |
+|-------------|-------------------|---------------|
+| `/api/v1/auth/*` | auth-service | `/auth/*` |
+| `/api/v1/users/*` | user-service | `/users/*` |
+| `/api/v1/products/*` | product-service | `/products/*` |
+| `/api/v1/orders/*` | order-service | `/orders/*` |
+| `/api/v1/payments/*` | payment-service | `/payments/*` |
+| `/api/v1/inventory/*` | inventory-service | `/inventory/*` |
+
+## Authentication
+
+The gateway validates JWT tokens on all `/api/*` routes when `REQUIRE_AUTH=true`.
+
+<CodeGroup>
+```typescript src/middleware/auth.middleware.ts
+import { Request, Response, NextFunction } from 'express';
+import { verifyJwt } from '../utils/jwt.js';
+import { gatewayConfig } from '../config/env.js';
+
+export const authMiddleware = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  // Skip auth for public routes
+  if (!req.path.startsWith('/api/')) {
+    return next();
+  }
+
+  if (!gatewayConfig.requireAuth) {
+    return next();
+  }
+
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ')
+    ? authHeader.substring(7)
+    : null;
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      error: {
+        message: 'Authentication required',
+        code: 'UNAUTHORIZED'
+      }
+    });
+  }
+
+  try {
+    const payload = verifyJwt(token);
+    req.token = token;
+    req.userId = payload.sub;
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      error: {
+        message: 'Invalid or expired token',
+        code: 'UNAUTHORIZED'
+      }
+    });
+  }
+};
+```
+</CodeGroup>
+
+## Request forwarding
+
+The gateway forwards authentication tokens and correlation IDs to downstream services:
+
+<CodeGroup>
+```typescript src/routes/gateway.routes.ts
+proxyReq.setHeader('authorization', `Bearer ${req.token}`);
+proxyReq.setHeader('x-correlation-id', req.correlationId);
+proxyReq.setHeader('x-request-id', req.correlationId);
+```
+</CodeGroup>
+
+## Rate limiting
+
+Rate limiting is applied to all `/api/*` routes:
+
+```typescript
+const limiter = rateLimit({
+  windowMs: 60000,        // 1 minute
+  max: 1000,              // 1000 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/', limiter);
+```
+
+<Warning>
+Rate limit exceeded responses return HTTP 429 with the message configured in `RATE_LIMIT_MESSAGE`.
+</Warning>
+
+## Running the service
+
+<CodeGroup>
+```bash Development
+cd api-gateway
+pnpm install
+pnpm dev
+```
+
+```bash Production
+pnpm build
+pnpm start
+```
+</CodeGroup>
+
+## Error handling
+
+The gateway returns consistent error responses:
+
+```json
+{
+  "success": false,
+  "error": {
+    "message": "Service user-service is unavailable",
+    "code": "SERVICE_UNAVAILABLE",
+    "correlationId": "abc-123-def"
+  }
+}
+```
+
+## Dependencies
+
+The gateway depends on:
+
+- All downstream microservices for proxying
+- Auth service for JWT secret coordination
+
+## Source code
+
+Location: `~/workspace/source/micros/api-gateway/`
+
+Key files:
+- `src/index.ts` - Main application entry point
+- `src/routes/gateway.routes.ts` - Proxy route configuration
+- `src/config/services.ts` - Service registry
+- `src/middleware/auth.middleware.ts` - JWT authentication

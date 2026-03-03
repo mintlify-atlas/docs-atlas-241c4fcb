@@ -1,0 +1,356 @@
+---
+title: OpenAPI contract governance
+description: Understand how QeetMart enforces API stability through OpenAPI contracts
+---
+
+## Overview
+
+QeetMart uses **contract-first API development** with OpenAPI 3.0.3 specifications as the source of truth. All API changes are validated through automated linting and breaking change detection.
+
+## Contract location
+
+All OpenAPI specifications are stored in the `contracts/openapi/` directory:
+
+```bash
+contracts/openapi/
+├── auth-service.openapi.json
+├── inventory-service.openapi.json
+├── product-service.openapi.json
+└── user-service.openapi.json
+```
+
+These files define the public API contracts for each microservice.
+
+## Contract validation commands
+
+### Lint contracts
+
+Validate that all OpenAPI specs follow required standards:
+
+```bash
+pnpm contracts:lint
+```
+
+This runs `tools/ci/openapi-lint.mjs` which checks:
+
+<Steps>
+  <Step title="OpenAPI version">
+    Ensures `openapi` field is a valid 3.x version string.
+  </Step>
+
+  <Step title="Info object">
+    Validates that `info.title` and `info.version` are non-empty strings.
+  </Step>
+
+  <Step title="Paths object">
+    Confirms that the `paths` object exists and contains valid routes.
+  </Step>
+
+  <Step title="Path structure">
+    Verifies each path:
+    - Starts with `/`
+    - Contains at least one HTTP operation
+    - Has valid HTTP methods (GET, POST, PUT, PATCH, DELETE, etc.)
+  </Step>
+
+  <Step title="Operation requirements">
+    Each operation must have:
+    - `summary` (non-empty string)
+    - `operationId` (unique across the spec)
+    - `responses` (at least one status code)
+  </Step>
+</Steps>
+
+### Check breaking changes
+
+Detect breaking changes between the current branch and base branch:
+
+```bash
+pnpm contracts:breaking
+```
+
+This runs `tools/ci/openapi-breaking.mjs` which enforces:
+
+- **No file deletion**: Removing a contract file is breaking
+- **No path removal**: Deleting endpoints breaks existing clients
+- **No operation removal**: Removing HTTP methods is breaking
+- **No new required parameters**: Adding required params breaks clients
+- **No new required request fields**: Adding required body fields is breaking
+- **No response code removal**: Removing documented responses is breaking
+
+<Warning>
+Breaking changes will fail CI builds. If you need to make a breaking change, coordinate with API consumers and version the change appropriately.
+</Warning>
+
+## Contract linting rules
+
+The linter enforces these requirements:
+
+### Required metadata
+
+```json
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Auth Service API",
+    "version": "1.1.0",
+    "description": "QEETMART identity endpoints..."
+  }
+}
+```
+
+### Path validation
+
+- Paths must start with `/`
+- Each path must have at least one HTTP operation
+- Path items must be objects
+
+### Operation validation
+
+```json
+{
+  "paths": {
+    "/api/register": {
+      "post": {
+        "summary": "Register a new user",
+        "operationId": "registerUser",
+        "responses": {
+          "201": {
+            "description": "User registered successfully"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Each operation requires:
+- `summary`: Brief description of the operation
+- `operationId`: Unique identifier (used for client generation)
+- `responses`: At least one response code defined
+
+### Duplicate detection
+
+The linter ensures no `operationId` appears twice in the same spec.
+
+## Breaking change detection
+
+The breaking change checker compares the current spec against the base branch:
+
+### How it works
+
+<Steps>
+  <Step title="Determine base reference">
+    Uses `GITHUB_BASE_REF` in CI or `HEAD~1` locally.
+  </Step>
+
+  <Step title="Find changed files">
+    Runs `git diff` to identify modified OpenAPI files in `contracts/openapi/`.
+  </Step>
+
+  <Step title="Compare specifications">
+    For each changed file, compares the base and head versions.
+  </Step>
+
+  <Step title="Check for violations">
+    Validates against breaking change rules.
+  </Step>
+</Steps>
+
+### Breaking change examples
+
+<CodeGroup>
+```json Removed path (Breaking)
+// Base branch
+{
+  "paths": {
+    "/api/users": { ... },
+    "/api/products": { ... }
+  }
+}
+
+// Current branch (BREAKING)
+{
+  "paths": {
+    "/api/users": { ... }
+    // /api/products removed ❌
+  }
+}
+```
+
+```json Added required parameter (Breaking)
+// Base branch
+{
+  "parameters": [
+    { "name": "id", "in": "path", "required": true }
+  ]
+}
+
+// Current branch (BREAKING)
+{
+  "parameters": [
+    { "name": "id", "in": "path", "required": true },
+    { "name": "version", "in": "query", "required": true } // ❌
+  ]
+}
+```
+
+```json Removed response code (Breaking)
+// Base branch
+{
+  "responses": {
+    "200": { ... },
+    "404": { ... }
+  }
+}
+
+// Current branch (BREAKING)
+{
+  "responses": {
+    "200": { ... }
+    // 404 removed ❌
+  }
+}
+```
+</CodeGroup>
+
+## Non-breaking changes
+
+These changes are safe and won't fail the breaking change check:
+
+- Adding new paths or operations
+- Adding optional parameters
+- Adding optional request fields
+- Adding new response codes
+- Updating descriptions or examples
+- Adding new response fields (additive changes)
+
+## Generated API clients
+
+After syncing OpenAPI specs to the docs app, you can generate TypeScript API clients:
+
+```bash
+pnpm docs:generate:clients
+```
+
+Clients are generated into `packages/openapi-clients/` and can be imported in frontend apps:
+
+```typescript
+import { AuthServiceClient } from '@qeetmart/openapi-clients/auth';
+```
+
+## Contract sync workflow
+
+When you update a contract:
+
+<Steps>
+  <Step title="Edit the OpenAPI spec">
+    Modify the JSON file in `contracts/openapi/`.
+  </Step>
+
+  <Step title="Run linter">
+    ```bash
+    pnpm contracts:lint
+    ```
+    
+    Fix any validation errors.
+  </Step>
+
+  <Step title="Check for breaking changes">
+    ```bash
+    pnpm contracts:breaking
+    ```
+    
+    Ensure no breaking changes are introduced (or coordinate with consumers).
+  </Step>
+
+  <Step title="Sync to docs">
+    ```bash
+    pnpm docs:sync:openapi
+    ```
+    
+    This copies specs to `apps/docs/openapi/v1/` for documentation.
+  </Step>
+
+  <Step title="Generate clients (optional)">
+    ```bash
+    pnpm docs:generate:clients
+    ```
+  </Step>
+
+  <Step title="Commit changes">
+    Commit both the contract and synced docs files together.
+  </Step>
+</Steps>
+
+## CI enforcement
+
+The CI workflow (`.github/workflows/ci.yml`) runs contract checks automatically:
+
+```yaml
+- name: OpenAPI Lint
+  run: pnpm contracts:lint
+
+- name: OpenAPI Breaking Changes
+  run: pnpm contracts:breaking
+```
+
+These checks must pass before merging any PR that modifies contracts.
+
+## Example: Auth Service contract
+
+The auth service contract defines identity endpoints:
+
+```json
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Auth Service API",
+    "version": "1.1.0",
+    "description": "QEETMART identity endpoints for authentication, session management, and profile identity reads."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4001"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "RegisterRequest": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string", "minLength": 8 }
+        }
+      }
+    }
+  }
+}
+```
+
+## Best practices
+
+- Update contracts before implementing features
+- Run both lint and breaking checks before committing
+- Document all parameters and response schemas
+- Use semantic versioning for `info.version`
+- Keep contracts and implementation in sync
+- Never delete contracts without coordinating with consumers
+
+<Tip>
+When adding a new service, create its OpenAPI contract first, validate it with the linter, and then implement the service to match the contract.
+</Tip>
+
+## Next steps
+
+- Review the [API Reference](/api/auth/overview) for detailed endpoint documentation
+- Learn about [deployment workflows](/deployment/ci-cd)

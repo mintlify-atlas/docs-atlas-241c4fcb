@@ -1,0 +1,431 @@
+---
+title: Helm chart deployment
+description: Deploy QeetMart using Helm charts for simplified Kubernetes package management and configuration
+---
+
+The QeetMart Helm chart provides a complete, configurable deployment package for Kubernetes. Helm simplifies the deployment process by templating Kubernetes manifests and managing releases.
+
+## Prerequisites
+
+Before installing the Helm chart, ensure you have:
+
+- Kubernetes cluster 1.27 or later
+- Helm 3.12 or later
+- kubectl CLI configured
+- NGINX Ingress Controller (if ingress is enabled)
+
+## Quick start
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/qeetgroup/qeetmart.git
+    cd qeetmart/helm
+    ```
+  </Step>
+
+  <Step title="Create a values file">
+    Create `my-values.yaml` with your configuration:
+
+    ```yaml
+    global:
+      secrets:
+        JWT_SECRET: "your-secure-jwt-secret-min-32-chars"
+        AUTH_DB_PASSWORD: "your-auth-password"
+        USER_DB_PASSWORD: "your-user-password"
+        PRODUCT_DB_PASSWORD: "your-product-password"
+        INVENTORY_DATABASE_URL: "postgres://postgres:password@inventory-postgres:5432/inventory?sslmode=disable"
+
+    ingress:
+      enabled: true
+      host: api.yourdomain.com
+    ```
+  </Step>
+
+  <Step title="Install the chart">
+    ```bash
+    helm install qeetmart ./qeetmart -f my-values.yaml
+    ```
+  </Step>
+
+  <Step title="Verify installation">
+    ```bash
+    helm status qeetmart
+    kubectl get pods -l app.kubernetes.io/instance=qeetmart
+    ```
+  </Step>
+</Steps>
+
+## Chart structure
+
+The Helm chart is located in `helm/qeetmart/` with the following structure:
+
+```
+qeetmart/
+├── Chart.yaml              # Chart metadata
+├── values.yaml             # Default values
+└── templates/
+    ├── deployment.yaml     # Deployment template
+    ├── service.yaml        # Service template
+    ├── hpa.yaml           # HorizontalPodAutoscaler template
+    ├── ingress.yaml       # Ingress template
+    └── config-secret.yaml # ConfigMap and Secret templates
+```
+
+## Chart metadata
+
+```yaml
+apiVersion: v2
+name: qeetmart
+description: Helm chart for Qeetmart microservices
+version: 0.1.0
+appVersion: "0.1.0"
+type: application
+```
+
+## Configuration
+
+### Global configuration
+
+Global settings shared across all services:
+
+```yaml
+global:
+  imagePullSecrets: []
+  config:
+    JWT_ISSUER_URI: "http://auth-service:4001"
+    JPA_DDL_AUTO: "validate"
+    GIN_MODE: "release"
+  secrets:
+    JWT_SECRET: "CHANGE_ME"
+    AUTH_DB_PASSWORD: "CHANGE_ME"
+    USER_DB_PASSWORD: "CHANGE_ME"
+    PRODUCT_DB_PASSWORD: "CHANGE_ME"
+    INVENTORY_DATABASE_URL: "postgres://postgres:CHANGE_ME@inventory-postgres:5432/inventory?sslmode=disable"
+```
+
+<Warning>
+  Always override the default `CHANGE_ME` values with secure secrets. Never commit real secrets to version control.
+</Warning>
+
+### Ingress configuration
+
+Configure external access to the API Gateway:
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  host: api.qeetmart.local
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/rate-limit: "100"
+```
+
+### Service configuration
+
+Each microservice can be independently configured:
+
+#### API Gateway
+
+```yaml
+services:
+  apiGateway:
+    enabled: true
+    replicas: 2
+    port: 4000
+    servicePort: 80
+    image:
+      repository: ghcr.io/qeetgroup/qeetmart/api-gateway
+      tag: latest
+      pullPolicy: IfNotPresent
+    livenessPath: /health
+    readinessPath: /health
+    env:
+      PORT: "4000"
+      HOST: "0.0.0.0"
+      TRUST_PROXY: "true"
+      REQUIRE_AUTH: "true"
+      AUTH_SERVICE_URL: "http://auth-service:4001"
+      USER_SERVICE_URL: "http://user-service:8082"
+      PRODUCT_SERVICE_URL: "http://product-service:8083"
+      INVENTORY_SERVICE_URL: "http://inventory-service:8080"
+      JWT_ISSUER: "$(JWT_ISSUER_URI)"
+      JWT_SECRET: "$(JWT_SECRET)"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 20
+      targetCPUUtilizationPercentage: 70
+```
+
+#### Auth Service
+
+```yaml
+  authService:
+    enabled: true
+    replicas: 2
+    port: 4001
+    servicePort: 4001
+    image:
+      repository: ghcr.io/qeetgroup/qeetmart/auth-service
+      tag: latest
+      pullPolicy: IfNotPresent
+    livenessPath: /actuator/health/liveness
+    readinessPath: /actuator/health/readiness
+    env:
+      SERVER_PORT: "4001"
+      DB_HOST: auth-postgres
+      DB_PORT: "5432"
+      DB_NAME: auth_db
+      DB_USERNAME: postgres
+      DB_PASSWORD: "$(AUTH_DB_PASSWORD)"
+      JWT_SECRET: "$(JWT_SECRET)"
+      JWT_ISSUER_URI: "$(JWT_ISSUER_URI)"
+      JPA_DDL_AUTO: "$(JPA_DDL_AUTO)"
+    resources:
+      requests:
+        cpu: 150m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 20
+      targetCPUUtilizationPercentage: 70
+```
+
+### Environment variable references
+
+The chart uses a special syntax `$(VARIABLE_NAME)` to reference global configuration:
+
+- Values in `global.config` are injected as ConfigMap references
+- Values in `global.secrets` are injected as Secret references
+- Other values are used directly
+
+## Helm commands
+
+<CodeGroup>
+```bash Install chart
+helm install qeetmart ./qeetmart -f my-values.yaml
+```
+
+```bash Install in specific namespace
+helm install qeetmart ./qeetmart -n production --create-namespace -f my-values.yaml
+```
+
+```bash Upgrade release
+helm upgrade qeetmart ./qeetmart -f my-values.yaml
+```
+
+```bash Rollback to previous version
+helm rollback qeetmart
+```
+
+```bash Uninstall release
+helm uninstall qeetmart
+```
+
+```bash View current values
+helm get values qeetmart
+```
+
+```bash Render templates locally
+helm template qeetmart ./qeetmart -f my-values.yaml
+```
+
+```bash Dry run installation
+helm install qeetmart ./qeetmart -f my-values.yaml --dry-run --debug
+```
+
+```bash List releases
+helm list
+```
+
+```bash View release history
+helm history qeetmart
+```
+</CodeGroup>
+
+## Advanced configuration
+
+### Disable specific services
+
+You can disable services you don't need:
+
+```yaml
+services:
+  inventoryService:
+    enabled: false
+```
+
+### Override image tags
+
+Use specific image versions:
+
+```yaml
+services:
+  apiGateway:
+    image:
+      tag: v1.2.3
+  authService:
+    image:
+      tag: v1.2.3
+```
+
+### Custom resource limits
+
+Adjust resources for your workload:
+
+```yaml
+services:
+  authService:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+```
+
+### Autoscaling configuration
+
+Customize autoscaling behavior:
+
+```yaml
+services:
+  apiGateway:
+    autoscaling:
+      enabled: true
+      minReplicas: 5
+      maxReplicas: 50
+      targetCPUUtilizationPercentage: 60
+```
+
+### Image pull secrets
+
+For private registries:
+
+```yaml
+global:
+  imagePullSecrets:
+    - name: ghcr-credentials
+```
+
+Create the secret:
+
+```bash
+kubectl create secret docker-registry ghcr-credentials \
+  --docker-server=ghcr.io \
+  --docker-username=your-username \
+  --docker-password=your-token
+```
+
+## Production values example
+
+Create a `production-values.yaml` file:
+
+```yaml
+global:
+  config:
+    JPA_DDL_AUTO: "validate"  # Never use "update" in production
+    GIN_MODE: "release"
+  secrets:
+    # Use external secret management in production
+    JWT_SECRET: "externally-managed-secret"
+    AUTH_DB_PASSWORD: "externally-managed-secret"
+    USER_DB_PASSWORD: "externally-managed-secret"
+    PRODUCT_DB_PASSWORD: "externally-managed-secret"
+    INVENTORY_DATABASE_URL: "externally-managed-url"
+
+ingress:
+  enabled: true
+  className: nginx
+  host: api.qeetmart.com
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+
+services:
+  apiGateway:
+    replicas: 5
+    image:
+      tag: v1.0.0
+    autoscaling:
+      minReplicas: 5
+      maxReplicas: 50
+
+  authService:
+    replicas: 3
+    image:
+      tag: v1.0.0
+    autoscaling:
+      minReplicas: 3
+      maxReplicas: 30
+```
+
+Deploy to production:
+
+```bash
+helm upgrade --install qeetmart ./qeetmart \
+  -n production \
+  --create-namespace \
+  -f production-values.yaml
+```
+
+## Validation
+
+### Lint the chart
+
+```bash
+helm lint ./qeetmart
+```
+
+### Validate templates
+
+```bash
+helm template qeetmart ./qeetmart -f my-values.yaml | kubectl apply --dry-run=client -f -
+```
+
+## Troubleshooting
+
+### View rendered templates
+
+If installation fails, check the rendered templates:
+
+```bash
+helm template qeetmart ./qeetmart -f my-values.yaml --debug
+```
+
+### Check release status
+
+```bash
+helm status qeetmart
+helm get manifest qeetmart
+```
+
+### View installation hooks
+
+```bash
+helm get hooks qeetmart
+```
+
+### Debug failed installation
+
+```bash
+helm install qeetmart ./qeetmart -f my-values.yaml --debug --dry-run
+```
+
+<Note>
+  For production deployments, consider using external secret management solutions like HashiCorp Vault, AWS Secrets Manager, or Kubernetes External Secrets Operator instead of storing secrets in values files.
+</Note>

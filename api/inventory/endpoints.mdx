@@ -1,0 +1,709 @@
+---
+title: Inventory API endpoints
+description: Complete reference for all Inventory Service API endpoints with parameters and examples
+---
+
+## Health check
+
+<api-endpoint method="GET" path="/health" />
+
+Check the health status of the Inventory Service, including database and Redis connectivity.
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Always `true` for successful health checks
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Status message - always "service is healthy"
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  <Expandable title="properties">
+    <ResponseField name="status" type="string" required>
+      Health status - always "ok"
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl http://localhost:8080/health
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:8080/health');
+const data = await response.json();
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Response
+{
+  "success": true,
+  "message": "service is healthy",
+  "data": {
+    "status": "ok"
+  }
+}
+```
+
+```json 500 Error
+{
+  "success": false,
+  "error": {
+    "code": "INTERNAL_ERROR",
+    "message": "unexpected internal error"
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Initialize inventory
+
+<api-endpoint method="POST" path="/inventory/init" />
+
+Create a new inventory record for a product with an initial stock quantity. This operation is idempotent - if inventory already exists for the product, it is not modified.
+
+### Body parameters
+
+<ParamField body="productId" type="string" required>
+  Unique identifier for the product
+</ParamField>
+
+<ParamField body="quantity" type="integer" required>
+  Initial available quantity (must be >= 0)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the operation succeeded
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Operation result message
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  <Expandable title="InventoryStock properties">
+    <ResponseField name="productId" type="string" required>
+      Product identifier
+    </ResponseField>
+
+    <ResponseField name="availableQuantity" type="integer" required>
+      Quantity available for reservation
+    </ResponseField>
+
+    <ResponseField name="reservedQuantity" type="integer" required>
+      Quantity currently reserved for pending orders
+    </ResponseField>
+
+    <ResponseField name="createdAt" type="string" required>
+      ISO 8601 timestamp of inventory creation
+    </ResponseField>
+
+    <ResponseField name="updatedAt" type="string" required>
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8080/inventory/init \
+  -H "Content-Type: application/json" \
+  -d '{
+    "productId": "prod_001",
+    "quantity": 100
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:8080/inventory/init', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    productId: 'prod_001',
+    quantity: 100
+  })
+});
+const data = await response.json();
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Response
+{
+  "success": true,
+  "message": "inventory initialized",
+  "data": {
+    "productId": "prod_001",
+    "availableQuantity": 100,
+    "reservedQuantity": 0,
+    "createdAt": "2026-03-03T10:30:00Z",
+    "updatedAt": "2026-03-03T10:30:00Z"
+  }
+}
+```
+
+```json 400 Error
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_QUANTITY",
+    "message": "quantity must be >= 0"
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Get inventory
+
+<api-endpoint method="GET" path="/inventory/{productId}" />
+
+Retrieve current stock levels for a specific product.
+
+### Path parameters
+
+<ParamField path="productId" type="string" required>
+  Product identifier
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the operation succeeded
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Operation result message
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  <Expandable title="InventoryStock properties">
+    <ResponseField name="productId" type="string" required>
+      Product identifier
+    </ResponseField>
+
+    <ResponseField name="availableQuantity" type="integer" required>
+      Quantity available for reservation
+    </ResponseField>
+
+    <ResponseField name="reservedQuantity" type="integer" required>
+      Quantity currently reserved for pending orders
+    </ResponseField>
+
+    <ResponseField name="createdAt" type="string" required>
+      ISO 8601 timestamp of inventory creation
+    </ResponseField>
+
+    <ResponseField name="updatedAt" type="string" required>
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl http://localhost:8080/inventory/prod_001
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:8080/inventory/prod_001');
+const data = await response.json();
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Response
+{
+  "success": true,
+  "message": "inventory fetched",
+  "data": {
+    "productId": "prod_001",
+    "availableQuantity": 85,
+    "reservedQuantity": 15,
+    "createdAt": "2026-03-03T10:30:00Z",
+    "updatedAt": "2026-03-03T11:45:00Z"
+  }
+}
+```
+
+```json 404 Error
+{
+  "success": false,
+  "error": {
+    "code": "PRODUCT_NOT_FOUND",
+    "message": "inventory record not found"
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Add stock
+
+<api-endpoint method="POST" path="/inventory/add-stock" />
+
+Increase the available quantity for an existing product. The operation uses row-level locking to ensure thread safety.
+
+### Body parameters
+
+<ParamField body="productId" type="string" required>
+  Product identifier
+</ParamField>
+
+<ParamField body="quantity" type="integer" required>
+  Amount to add to available stock (must be > 0)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the operation succeeded
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Operation result message
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  <Expandable title="InventoryStock properties">
+    <ResponseField name="productId" type="string" required>
+      Product identifier
+    </ResponseField>
+
+    <ResponseField name="availableQuantity" type="integer" required>
+      Updated available quantity after adding stock
+    </ResponseField>
+
+    <ResponseField name="reservedQuantity" type="integer" required>
+      Reserved quantity (unchanged)
+    </ResponseField>
+
+    <ResponseField name="createdAt" type="string" required>
+      ISO 8601 timestamp of inventory creation
+    </ResponseField>
+
+    <ResponseField name="updatedAt" type="string" required>
+      ISO 8601 timestamp of this update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8080/inventory/add-stock \
+  -H "Content-Type: application/json" \
+  -d '{
+    "productId": "prod_001",
+    "quantity": 50
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:8080/inventory/add-stock', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    productId: 'prod_001',
+    quantity: 50
+  })
+});
+const data = await response.json();
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Response
+{
+  "success": true,
+  "message": "stock added",
+  "data": {
+    "productId": "prod_001",
+    "availableQuantity": 135,
+    "reservedQuantity": 15,
+    "createdAt": "2026-03-03T10:30:00Z",
+    "updatedAt": "2026-03-03T12:00:00Z"
+  }
+}
+```
+
+```json 404 Error
+{
+  "success": false,
+  "error": {
+    "code": "PRODUCT_NOT_FOUND",
+    "message": "inventory record not found"
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Reserve stock
+
+<api-endpoint method="POST" path="/inventory/reserve" />
+
+Reserve inventory for a pending order. Stock is moved from available to reserved, and a reservation record is created with an expiration time. The reservation is also cached in Redis.
+
+### Body parameters
+
+<ParamField body="productId" type="string" required>
+  Product identifier
+</ParamField>
+
+<ParamField body="orderId" type="string" required>
+  Order identifier that owns this reservation
+</ParamField>
+
+<ParamField body="quantity" type="integer" required>
+  Quantity to reserve (must be > 0)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the operation succeeded
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Operation result message
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  <Expandable title="InventoryReservation properties">
+    <ResponseField name="reservationId" type="string" required>
+      Unique reservation identifier (UUID)
+    </ResponseField>
+
+    <ResponseField name="productId" type="string" required>
+      Product identifier
+    </ResponseField>
+
+    <ResponseField name="orderId" type="string" required>
+      Order identifier
+    </ResponseField>
+
+    <ResponseField name="quantity" type="integer" required>
+      Reserved quantity
+    </ResponseField>
+
+    <ResponseField name="status" type="string" required>
+      Reservation status - always "RESERVED" for new reservations
+    </ResponseField>
+
+    <ResponseField name="expiresAt" type="string" required>
+      ISO 8601 timestamp when reservation expires
+    </ResponseField>
+
+    <ResponseField name="createdAt" type="string" required>
+      ISO 8601 timestamp of reservation creation
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8080/inventory/reserve \
+  -H "Content-Type: application/json" \
+  -d '{
+    "productId": "prod_001",
+    "orderId": "order_123",
+    "quantity": 5
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:8080/inventory/reserve', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    productId: 'prod_001',
+    orderId: 'order_123',
+    quantity: 5
+  })
+});
+const data = await response.json();
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 201 Response
+{
+  "success": true,
+  "message": "stock reserved",
+  "data": {
+    "reservationId": "550e8400-e29b-41d4-a716-446655440000",
+    "productId": "prod_001",
+    "orderId": "order_123",
+    "quantity": 5,
+    "status": "RESERVED",
+    "expiresAt": "2026-03-03T12:30:00Z",
+    "createdAt": "2026-03-03T12:00:00Z"
+  }
+}
+```
+
+```json 409 Error
+{
+  "success": false,
+  "error": {
+    "code": "INSUFFICIENT_STOCK",
+    "message": "not enough available stock"
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Release reservation
+
+<api-endpoint method="POST" path="/inventory/release" />
+
+Release a reservation and return stock to the available pool. Use this when an order is cancelled or fails. The operation checks Redis cache before querying the database for improved performance.
+
+### Body parameters
+
+<ParamField body="reservationId" type="string" required>
+  Reservation identifier to release
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the operation succeeded
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Operation result message
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  <Expandable title="InventoryReservation properties">
+    <ResponseField name="reservationId" type="string" required>
+      Unique reservation identifier
+    </ResponseField>
+
+    <ResponseField name="productId" type="string" required>
+      Product identifier
+    </ResponseField>
+
+    <ResponseField name="orderId" type="string" required>
+      Order identifier
+    </ResponseField>
+
+    <ResponseField name="quantity" type="integer" required>
+      Quantity that was released
+    </ResponseField>
+
+    <ResponseField name="status" type="string" required>
+      Updated status - "RELEASED"
+    </ResponseField>
+
+    <ResponseField name="expiresAt" type="string" required>
+      ISO 8601 timestamp of original expiration
+    </ResponseField>
+
+    <ResponseField name="createdAt" type="string" required>
+      ISO 8601 timestamp of original creation
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8080/inventory/release \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reservationId": "550e8400-e29b-41d4-a716-446655440000"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:8080/inventory/release', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    reservationId: '550e8400-e29b-41d4-a716-446655440000'
+  })
+});
+const data = await response.json();
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Response
+{
+  "success": true,
+  "message": "reservation released",
+  "data": {
+    "reservationId": "550e8400-e29b-41d4-a716-446655440000",
+    "productId": "prod_001",
+    "orderId": "order_123",
+    "quantity": 5,
+    "status": "RELEASED",
+    "expiresAt": "2026-03-03T12:30:00Z",
+    "createdAt": "2026-03-03T12:00:00Z"
+  }
+}
+```
+
+```json 409 Error - Already Released
+{
+  "success": false,
+  "error": {
+    "code": "RESERVATION_ALREADY_RELEASED",
+    "message": "reservation already released"
+  }
+}
+```
+
+```json 409 Error - Already Deducted
+{
+  "success": false,
+  "error": {
+    "code": "RESERVATION_ALREADY_DEDUCTED",
+    "message": "reservation already deducted"
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Deduct reservation
+
+<api-endpoint method="POST" path="/inventory/deduct" />
+
+Permanently deduct reserved stock when an order is successfully completed. This moves the reservation to the DEDUCTED state and decrements the reserved quantity without returning it to available stock.
+
+### Body parameters
+
+<ParamField body="reservationId" type="string" required>
+  Reservation identifier to deduct
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the operation succeeded
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Operation result message
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  <Expandable title="InventoryReservation properties">
+    <ResponseField name="reservationId" type="string" required>
+      Unique reservation identifier
+    </ResponseField>
+
+    <ResponseField name="productId" type="string" required>
+      Product identifier
+    </ResponseField>
+
+    <ResponseField name="orderId" type="string" required>
+      Order identifier
+    </ResponseField>
+
+    <ResponseField name="quantity" type="integer" required>
+      Quantity that was deducted
+    </ResponseField>
+
+    <ResponseField name="status" type="string" required>
+      Updated status - "DEDUCTED"
+    </ResponseField>
+
+    <ResponseField name="expiresAt" type="string" required>
+      ISO 8601 timestamp of original expiration
+    </ResponseField>
+
+    <ResponseField name="createdAt" type="string" required>
+      ISO 8601 timestamp of original creation
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8080/inventory/deduct \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reservationId": "550e8400-e29b-41d4-a716-446655440000"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:8080/inventory/deduct', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    reservationId: '550e8400-e29b-41d4-a716-446655440000'
+  })
+});
+const data = await response.json();
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Response
+{
+  "success": true,
+  "message": "reservation deducted",
+  "data": {
+    "reservationId": "550e8400-e29b-41d4-a716-446655440000",
+    "productId": "prod_001",
+    "orderId": "order_123",
+    "quantity": 5,
+    "status": "DEDUCTED",
+    "expiresAt": "2026-03-03T12:30:00Z",
+    "createdAt": "2026-03-03T12:00:00Z"
+  }
+}
+```
+
+```json 409 Error - Already Deducted
+{
+  "success": false,
+  "error": {
+    "code": "RESERVATION_ALREADY_DEDUCTED",
+    "message": "reservation already deducted"
+  }
+}
+```
+
+```json 409 Error - Already Released
+{
+  "success": false,
+  "error": {
+    "code": "RESERVATION_ALREADY_RELEASED",
+    "message": "reservation already released"
+  }
+}
+```
+</CodeGroup>

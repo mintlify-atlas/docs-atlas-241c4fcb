@@ -1,0 +1,373 @@
+---
+title: Kubernetes deployment
+description: Deploy QeetMart to Kubernetes clusters using Kustomize for environment-specific configurations
+---
+
+QeetMart uses Kustomize to manage Kubernetes manifests across multiple environments. This approach provides a declarative, version-controlled deployment strategy with environment-specific overlays.
+
+## Prerequisites
+
+Before deploying to Kubernetes, ensure you have:
+
+- Kubernetes cluster 1.27 or later
+- kubectl CLI configured
+- Kustomize 5.0 or later
+- NGINX Ingress Controller installed
+- Container images pushed to registry
+
+## Architecture overview
+
+The Kubernetes deployment includes:
+
+- Namespace isolation (`qeetmart`)
+- Deployments for all microservices
+- Services for internal communication
+- HorizontalPodAutoscalers for scaling
+- Ingress for external access
+- ConfigMaps and Secrets for configuration
+
+## Quick start
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/qeetgroup/qeetmart.git
+    cd qeetmart/platform/k8s
+    ```
+  </Step>
+
+  <Step title="Configure secrets">
+    Edit `base/shared-config.yaml` and update the secret values:
+
+    ```yaml
+    stringData:
+      JWT_SECRET: "your-secure-jwt-secret"
+      AUTH_DB_PASSWORD: "your-auth-db-password"
+      USER_DB_PASSWORD: "your-user-db-password"
+      PRODUCT_DB_PASSWORD: "your-product-db-password"
+      INVENTORY_DATABASE_URL: "postgres://postgres:password@inventory-postgres:5432/inventory?sslmode=disable"
+    ```
+
+    <Warning>
+      Never commit real secrets to version control. Use tools like sealed-secrets or external secret operators in production.
+    </Warning>
+  </Step>
+
+  <Step title="Deploy to development environment">
+    ```bash
+    kubectl apply -k overlays/dev
+    ```
+  </Step>
+
+  <Step title="Verify deployment">
+    ```bash
+    kubectl get pods -n qeetmart-dev
+    kubectl get services -n qeetmart-dev
+    kubectl get ingress -n qeetmart-dev
+    ```
+  </Step>
+</Steps>
+
+## Base manifests
+
+The base configuration in `platform/k8s/base/` defines the core resources:
+
+### Namespace
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: qeetmart
+  labels:
+    app.kubernetes.io/part-of: qeetmart
+```
+
+### Shared configuration
+
+ConfigMap for application configuration:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qeetmart-shared-config
+data:
+  JWT_ISSUER_URI: "http://auth-service:4001"
+  JPA_DDL_AUTO: "validate"
+  GIN_MODE: "release"
+```
+
+Secret for sensitive data:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: qeetmart-shared-secrets
+type: Opaque
+stringData:
+  JWT_SECRET: "CHANGE_ME"
+  AUTH_DB_PASSWORD: "CHANGE_ME"
+  USER_DB_PASSWORD: "CHANGE_ME"
+  PRODUCT_DB_PASSWORD: "CHANGE_ME"
+```
+
+### Service deployments
+
+Each microservice has a Deployment, Service, and HorizontalPodAutoscaler:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  labels:
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/part-of: qeetmart
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api-gateway
+  template:
+    spec:
+      containers:
+        - name: api-gateway
+          image: ghcr.io/qeetgroup/qeetmart/api-gateway:latest
+          ports:
+            - containerPort: 4000
+              name: http
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: qeetmart-shared-secrets
+                  key: JWT_SECRET
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+```
+
+### Autoscaling
+
+All services include HorizontalPodAutoscalers:
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-gateway
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-gateway
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+```
+
+### Ingress
+
+NGINX Ingress routes external traffic to the API Gateway:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: qeetmart-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.qeetmart.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 80
+```
+
+## Environment overlays
+
+Kustomize overlays customize the base manifests for each environment.
+
+### Development overlay
+
+```yaml
+# overlays/dev/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: qeetmart-dev
+resources:
+  - ../../base
+patches:
+  - path: replicas-patch.yaml
+  - path: config-patch.yaml
+images:
+  - name: ghcr.io/qeetgroup/qeetmart/api-gateway
+    newTag: dev
+  - name: ghcr.io/qeetgroup/qeetmart/auth-service
+    newTag: dev
+  - name: ghcr.io/qeetgroup/qeetmart/user-service
+    newTag: dev
+  - name: ghcr.io/qeetgroup/qeetmart/product-service
+    newTag: dev
+  - name: ghcr.io/qeetgroup/qeetmart/inventory-service
+    newTag: dev
+```
+
+### Staging overlay
+
+For staging environments with production-like settings:
+
+```bash
+kubectl apply -k overlays/staging
+```
+
+### Production overlay
+
+For production deployments with maximum replicas and strict validation:
+
+```bash
+kubectl apply -k overlays/prod
+```
+
+## Deployment commands
+
+<CodeGroup>
+```bash Deploy to development
+kubectl apply -k overlays/dev
+```
+
+```bash Deploy to staging
+kubectl apply -k overlays/staging
+```
+
+```bash Deploy to production
+kubectl apply -k overlays/prod
+```
+
+```bash Preview changes without applying
+kubectl diff -k overlays/dev
+```
+
+```bash Build manifests locally
+kustomize build overlays/dev > dev-manifests.yaml
+```
+
+```bash Delete deployment
+kubectl delete -k overlays/dev
+```
+</CodeGroup>
+
+## Monitoring deployment
+
+### Check pod status
+
+```bash
+kubectl get pods -n qeetmart-dev -w
+```
+
+### View pod logs
+
+```bash
+kubectl logs -n qeetmart-dev deployment/api-gateway -f
+```
+
+### Describe resources
+
+```bash
+kubectl describe deployment -n qeetmart-dev api-gateway
+```
+
+### Check autoscaler status
+
+```bash
+kubectl get hpa -n qeetmart-dev
+```
+
+## Resource requirements
+
+### API Gateway
+- Requests: 100m CPU, 128Mi memory
+- Limits: 500m CPU, 512Mi memory
+- Replicas: 2-20 (autoscaled at 70% CPU)
+
+### Java services (Auth, User, Product)
+- Requests: 150m CPU, 256Mi memory
+- Limits: 1000m CPU, 1Gi memory
+- Replicas: 2-20 (autoscaled at 70% CPU)
+
+### Inventory Service
+- Requests: 100m CPU, 128Mi memory
+- Limits: 800m CPU, 512Mi memory
+- Replicas: 2-20 (autoscaled at 70% CPU)
+
+## Troubleshooting
+
+### Pods in CrashLoopBackOff
+
+Check the pod logs:
+
+```bash
+kubectl logs -n qeetmart-dev pod-name --previous
+```
+
+Common causes:
+- Missing or incorrect secrets
+- Database connection issues
+- Image pull errors
+
+### Services not accessible
+
+Verify service and endpoint configuration:
+
+```bash
+kubectl get svc -n qeetmart-dev
+kubectl get endpoints -n qeetmart-dev
+```
+
+### Ingress not working
+
+Check ingress status and events:
+
+```bash
+kubectl describe ingress -n qeetmart-dev qeetmart-ingress
+```
+
+Ensure NGINX Ingress Controller is running:
+
+```bash
+kubectl get pods -n ingress-nginx
+```
+
+<Note>
+  For production deployments, consider using GitOps tools like Argo CD or Flux for automated, declarative deployments.
+</Note>

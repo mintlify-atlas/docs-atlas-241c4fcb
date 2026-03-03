@@ -1,0 +1,228 @@
+---
+title: Admin dashboard
+description: React-based admin dashboard for managing QeetMart operations, analytics, and inventory
+---
+
+The QeetMart admin dashboard is a comprehensive operations management interface built with React and Vite, featuring real-time analytics, inventory management, and user administration.
+
+## Technology stack
+
+The admin application uses a modern React stack optimized for performance:
+
+- **React 19** with React Compiler enabled
+- **Vite 7** for fast development and optimized builds
+- **React Router v7** for client-side routing
+- **TypeScript** for type safety
+- **Tailwind CSS v4** for styling
+- **TanStack Query** for server state management
+- **React Hook Form** with Zod validation
+- **Zustand** for client state management
+- **Recharts** for data visualization
+- **Framer Motion** for animations
+- **Radix UI** for accessible components
+
+## Key features
+
+### Dashboard and analytics
+
+Comprehensive business intelligence:
+
+- Real-time sales and revenue metrics
+- Product performance analytics
+- Customer behavior insights
+- Order tracking and fulfillment status
+- Custom date range filtering
+
+### Inventory management
+
+Complete product and stock control:
+
+- Product catalog management
+- Stock level monitoring
+- Low-stock alerts
+- Bulk product operations
+- Category and attribute management
+
+### Order management
+
+Streamlined order processing:
+
+- Order list with advanced filtering
+- Order detail views
+- Status updates and tracking
+- Customer information
+- Payment and shipping details
+
+### User administration
+
+Comprehensive user management:
+
+- Customer account management
+- Admin user management
+- Role-based access control
+- Permission management
+
+### Advanced features
+
+- Notification center for important events
+- Settings and configuration management
+- Insights and recommendations
+- Feedback and customer reviews
+
+## Project structure
+
+The application follows a feature-based architecture:
+
+```
+src/
+├── app/              # Application setup
+│   └── routes/       # Route definitions
+├── components/       # React components
+│   ├── analytics/    # Analytics components
+│   ├── charts/       # Chart components
+│   ├── feedback/     # Feedback components
+│   ├── filters/      # Filter components
+│   ├── forms/        # Form components
+│   ├── insights/     # Insights components
+│   ├── layout/       # Layout components
+│   └── ui/           # Base UI components
+├── guards/           # Route guards
+├── hooks/            # Custom React hooks
+├── lib/              # Utilities and helpers
+├── pages/            # Page components
+│   ├── auth/         # Authentication pages
+│   ├── dashboard-page.tsx
+│   ├── analytics-page.tsx
+│   ├── products-page.tsx
+│   ├── inventory-page.tsx
+│   ├── orders-page.tsx
+│   ├── customers-page.tsx
+│   ├── admins-page.tsx
+│   ├── roles-page.tsx
+│   ├── insights-page.tsx
+│   ├── notifications-page.tsx
+│   └── settings-page.tsx
+├── providers/        # Context providers
+├── services/         # API services
+└── stores/           # Zustand stores
+```
+
+## Getting started
+
+<Steps>
+  <Step title="Install dependencies">
+    From the repository root:
+
+    ```bash
+    pnpm install
+    ```
+  </Step>
+
+  <Step title="Configure environment">
+    Copy the example environment file:
+
+    ```bash
+    cp apps/admin/.env.example apps/admin/.env.local
+    ```
+
+    Update the authentication API URL:
+
+    ```bash
+    VITE_AUTH_API_BASE_URL=http://localhost:4000/api/v1/auth
+    ```
+  </Step>
+
+  <Step title="Start development server">
+    Run the development server:
+
+    ```bash
+    pnpm --filter admin dev
+    ```
+
+    The application will be available at `http://localhost:5173`.
+  </Step>
+</Steps>
+
+## Available scripts
+
+<CodeGroup>
+```bash Development
+pnpm --filter admin dev
+```
+
+```bash Build
+pnpm --filter admin build
+```
+
+```bash Preview
+pnpm --filter admin preview
+```
+
+```bash Lint
+pnpm --filter admin lint
+```
+
+```bash Bundle analysis
+pnpm --filter admin build:analyze
+```
+
+```bash Check bundle size
+pnpm --filter admin bundle:check
+```
+
+```bash Update baseline
+pnpm --filter admin bundle:baseline
+```
+</CodeGroup>
+
+## Access control
+
+<Note>
+Only accounts with the `ADMIN` or `SUPER_ADMIN` role can access this application. Regular customer accounts will be denied access.
+</Note>
+
+## Build optimization
+
+The Vite configuration includes advanced code splitting:
+
+- **vendor-react**: React core libraries
+- **vendor-query**: Data fetching (TanStack Query, Zustand)
+- **vendor-forms**: Form handling (React Hook Form, Zod)
+- **vendor-ui**: UI components (Radix UI, Lucide icons)
+- **vendor-motion**: Animations (Framer Motion)
+- **vendor-charts**: Data visualization (Recharts)
+
+### Bundle size monitoring
+
+The admin app includes bundle regression checking:
+
+1. Analyze current bundle: `pnpm --filter admin build:analyze`
+2. Check against baseline: `pnpm --filter admin bundle:check`
+3. Update baseline: `pnpm --filter admin bundle:baseline`
+
+Baseline is stored in `bundle-regression-baseline.json`.
+
+## Configuration
+
+### Vite configuration
+
+The application is configured in `vite.config.ts`:
+
+- React Compiler plugin for automatic optimization
+- Tailwind CSS integration
+- Path aliases (`@/` → `./src/`)
+- Manual chunk splitting for optimal loading
+- Bundle size warnings at 650 KB
+- Optional bundle analyzer with visualizations
+
+### Environment variables
+
+- `VITE_AUTH_API_BASE_URL`: Authentication API endpoint
+- `BUNDLE_ANALYZE`: Enable bundle analysis (`true`/`false`)
+
+## Development notes
+
+- The API Gateway runs on port 4000
+- Auth service runs on port 4001
+- Gateway forwards `/api/v1/auth/*` to auth service `/auth/*`
+- Admin authentication tokens are stored in localStorage

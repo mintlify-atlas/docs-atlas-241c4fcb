@@ -1,0 +1,319 @@
+---
+title: Mobile application
+description: React Native mobile storefront built with Expo Router and NativeWind for cross-platform commerce
+---
+
+The QeetMart mobile application is a React Native storefront built with Expo Router, providing web-like UX parity with native performance and styling powered by NativeWind (Tailwind for React Native).
+
+## Technology stack
+
+The mobile application uses modern React Native technologies:
+
+- **Expo 54** with Expo Router for file-based routing
+- **React Native 0.81** with New Architecture enabled
+- **React 19** with React Compiler enabled
+- **NativeWind 4** for Tailwind utility classes in React Native
+- **TypeScript** for type safety
+- **React Navigation** for navigation primitives
+- **Expo Image** for optimized image loading
+- **Reanimated** for smooth animations
+- **Gesture Handler** for touch interactions
+
+## Key features
+
+### Commerce flows
+
+Complete e-commerce functionality with native UX:
+
+- Home merchandising with featured and trending products
+- Product listing with search, filtering, and sorting
+- Product detail pages with image gallery
+- Shopping cart with quantity controls
+- Multi-step checkout with payment selection
+- User authentication and account management
+- Order history and tracking
+- Wishlist functionality
+
+### UI components
+
+Shadcn-style component library built with class-variance-authority:
+
+- `Button` with multiple variants
+- `Card` for content containers
+- `Input` for form fields
+- `Badge` for status indicators
+- Themed text and view components
+
+### Navigation
+
+Expo Router provides type-safe, file-based routing:
+
+- Tab-based navigation for main sections
+- Stack navigation for detailed flows
+- Deep linking support
+- Typed routes for compile-time safety
+
+### Platform features
+
+Native capabilities and optimizations:
+
+- Haptic feedback on interactions
+- Optimized image loading with Expo Image
+- Safe area handling for notches and home indicators
+- Status bar customization
+- Splash screen integration
+
+## Project structure
+
+The application uses Expo Router's file-based routing:
+
+```
+app/                  # Expo Router pages
+├── (tabs)/           # Tab navigation
+│   ├── index.tsx     # Home tab
+│   ├── explore.tsx   # Browse tab
+│   ├── cart.tsx      # Cart tab
+│   └── account.tsx   # Account tab
+├── checkout/         # Checkout flow
+│   └── success/      # Order success
+├── orders/           # Order history
+├── product/          # Product details
+└── _layout.tsx       # Root layout
+
+components/           # Reusable components
+├── ui/               # Base UI components
+│   ├── badge.tsx
+│   ├── button.tsx
+│   ├── card.tsx
+│   └── input.tsx
+├── external-link.tsx
+├── haptic-tab.tsx
+├── themed-text.tsx
+└── themed-view.tsx
+
+constants/            # App constants
+hooks/                # Custom hooks
+src/                  # Additional source code
+assets/               # Images and fonts
+scripts/              # Build scripts
+```
+
+## Getting started
+
+<Steps>
+  <Step title="Install dependencies">
+    From the repository root:
+
+    ```bash
+    pnpm install
+    ```
+  </Step>
+
+  <Step title="Start Expo development server">
+    Run the Expo development server:
+
+    ```bash
+    pnpm --filter mobile start
+    ```
+  </Step>
+
+  <Step title="Launch on device or emulator">
+    Choose your platform:
+
+    <CodeGroup>
+    ```bash iOS
+    pnpm --filter mobile ios
+    ```
+
+    ```bash Android
+    pnpm --filter mobile android
+    ```
+
+    ```bash Web
+    pnpm --filter mobile web
+    ```
+    </CodeGroup>
+
+    Or scan the QR code with Expo Go app on your device.
+  </Step>
+</Steps>
+
+## Available scripts
+
+<CodeGroup>
+```bash Start server
+pnpm --filter mobile start
+```
+
+```bash iOS
+pnpm --filter mobile ios
+```
+
+```bash Android
+pnpm --filter mobile android
+```
+
+```bash Web
+pnpm --filter mobile web
+```
+
+```bash Lint
+pnpm --filter mobile lint
+```
+
+```bash Type check
+pnpm --filter mobile exec tsc --noEmit
+```
+
+```bash Reset project
+pnpm --filter mobile reset-project
+```
+</CodeGroup>
+
+## Demo credentials
+
+For testing authentication:
+
+- **Email**: `demo@qeetmart.com`
+- **Password**: `demo123`
+
+## Configuration
+
+### Expo configuration
+
+The application is configured in `app.json`:
+
+```json
+{
+  "expo": {
+    "name": "mobile",
+    "slug": "mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "newArchEnabled": true,
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
+```
+
+Key features enabled:
+- **New Architecture**: Improved performance and capabilities
+- **Typed Routes**: Compile-time route validation
+- **React Compiler**: Automatic optimization
+
+### Platform-specific settings
+
+<Note>
+**iOS**: Supports tablets with `supportsTablet: true`
+
+**Android**: Edge-to-edge enabled with adaptive icon support
+
+**Web**: Static output for deployment
+</Note>
+
+### NativeWind setup
+
+Tailwind classes work in React Native through NativeWind:
+
+1. Import in components: `import { View, Text } from 'react-native'`
+2. Use className prop: `<View className="flex-1 items-center">`
+3. Configure in `tailwind.config.js`
+4. Type declarations in `nativewind-env.d.ts`
+
+## Development workflow
+
+### File-based routing
+
+Expo Router uses the file system for routing:
+
+- `app/index.tsx` → `/` (home screen)
+- `app/product/[id].tsx` → `/product/:id` (dynamic route)
+- `app/(tabs)/cart.tsx` → `/cart` (tab route)
+- `app/checkout/success/index.tsx` → `/checkout/success`
+
+### Styling with NativeWind
+
+Use Tailwind utility classes directly:
+
+```tsx
+<View className="flex-1 bg-white p-4">
+  <Text className="text-2xl font-bold text-gray-900">
+    Product Name
+  </Text>
+  <Button className="mt-4 bg-blue-600">
+    Add to Cart
+  </Button>
+</View>
+```
+
+### Component architecture
+
+Build reusable components with class-variance-authority:
+
+```tsx
+import { cva } from 'class-variance-authority'
+
+const buttonVariants = cva(
+  'rounded-lg font-medium',
+  {
+    variants: {
+      variant: {
+        default: 'bg-blue-600 text-white',
+        outline: 'border border-gray-300',
+      },
+      size: {
+        sm: 'px-3 py-2 text-sm',
+        lg: 'px-6 py-4 text-lg',
+      },
+    },
+  }
+)
+```
+
+## Building for production
+
+### iOS build
+
+```bash
+eas build --platform ios
+```
+
+### Android build
+
+```bash
+eas build --platform android
+```
+
+### Web export
+
+```bash
+pnpm --filter mobile web
+npx expo export --platform web
+```
+
+<Note>
+For production builds, you'll need to configure EAS (Expo Application Services) with `eas.json`.
+</Note>
+
+## Platform considerations
+
+- **Navigation**: Tab bar automatically adapts to platform conventions
+- **Safe Areas**: Use `SafeAreaView` from `react-native-safe-area-context`
+- **Images**: Expo Image provides automatic optimization and caching
+- **Gestures**: Use `GestureHandlerRootView` at app root
+- **Animations**: Reanimated provides 60 FPS animations
+
+## Testing
+
+Validate your changes before committing:
+
+```bash
+# Type checking
+pnpm --filter mobile exec tsc --noEmit
+
+# Linting
+pnpm --filter mobile lint
+```

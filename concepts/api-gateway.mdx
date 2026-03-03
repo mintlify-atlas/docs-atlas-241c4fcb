@@ -1,0 +1,421 @@
+---
+title: API Gateway
+description: Gateway design, routing configuration, and request proxying in QeetMart
+---
+
+The API Gateway serves as the single entry point for all client applications in QeetMart. Built with Node.js, Express, and TypeScript, it handles routing, authentication, rate limiting, and request proxying to downstream microservices.
+
+## Architecture overview
+
+The gateway implements the **Gateway Routing pattern** and **Gateway Offloading pattern**, centralizing cross-cutting concerns while remaining stateless for horizontal scalability.
+
+```text
+┌─────────────────┐
+│  Web Client     │
+│  Mobile App     │──┐
+│  Admin Portal   │  │
+└─────────────────┘  │
+                     ▼
+            ┌────────────────┐
+            │  API Gateway   │  Port 4000
+            │  (Express)     │
+            └────────────────┘
+                     │
+        ┌────────────┼────────────┐
+        ▼            ▼            ▼
+   ┌─────────┐ ┌──────────┐ ┌──────────┐
+   │  Auth   │ │ Product  │ │Inventory │
+   │ :4001   │ │  :8083   │ │  :8080   │
+   └─────────┘ └──────────┘ └──────────┘
+```
+
+## Gateway responsibilities
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="shield-check">
+    JWT token validation before proxying requests
+  </Card>
+  <Card title="Routing" icon="route">
+    Path-based routing to appropriate microservices
+  </Card>
+  <Card title="Rate Limiting" icon="gauge-high">
+    Protect downstream services from abuse
+  </Card>
+  <Card title="CORS" icon="globe">
+    Cross-origin request handling for web clients
+  </Card>
+  <Card title="Logging" icon="file-lines">
+    Request/response logging with correlation IDs
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation">
+    Standardized error responses
+  </Card>
+</CardGroup>
+
+## Service registry and routing
+
+The gateway maintains a service registry that maps downstream services to their base URLs and configurations.
+
+### Service configuration
+
+```typescript
+export interface ServiceConfig {
+  name: string;
+  baseUrl: string;
+  healthCheckPath?: string;
+  timeout?: number;
+}
+
+export const services: Record<string, ServiceConfig> = {
+  auth: {
+    name: 'auth-service',
+    baseUrl: process.env['AUTH_SERVICE_URL'] || 'http://localhost:4001',
+    healthCheckPath: '/actuator/health',
+    timeout: 5000,
+  },
+  users: {
+    name: 'user-service',
+    baseUrl: process.env['USER_SERVICE_URL'] || 'http://localhost:8082',
+    healthCheckPath: '/actuator/health',
+    timeout: 5000,
+  },
+  products: {
+    name: 'product-service',
+    baseUrl: process.env['PRODUCT_SERVICE_URL'] || 'http://localhost:8083',
+    healthCheckPath: '/actuator/health',
+    timeout: 5000,
+  },
+  inventory: {
+    name: 'inventory-service',
+    baseUrl: process.env['INVENTORY_SERVICE_URL'] || 'http://localhost:8080',
+    healthCheckPath: '/health',
+    timeout: 5000,
+  },
+};
+```
+
+From `micros/api-gateway/src/config/services.ts:13`
+
+### Route mapping
+
+Routes map external API paths to internal service endpoints:
+
+```typescript
+export const routeConfig: Array<{
+  path: string;
+  service: keyof typeof services;
+  upstreamPath: string;
+}> = [
+  { path: '/api/v1/auth', service: 'auth', upstreamPath: '/auth' },
+  { path: '/api/v1/users', service: 'users', upstreamPath: '/users' },
+  { path: '/api/v1/products', service: 'products', upstreamPath: '/products' },
+  { path: '/api/v1/inventory', service: 'inventory', upstreamPath: '/inventory' },
+];
+```
+
+From `micros/api-gateway/src/config/services.ts:55`
+
+<Accordion title="How path rewriting works">
+  When a client requests `GET /api/v1/products/123`, the gateway:
+  1. Matches the route `/api/v1/products`
+  2. Identifies the target service as `products` (port 8083)
+  3. Rewrites the path to `/products/123`
+  4. Proxies to `http://product-service:8083/products/123`
+  
+  This allows internal service APIs to use their own path conventions while presenting a unified API structure to clients.
+</Accordion>
+
+## Request proxying
+
+The gateway uses `http-proxy-middleware` to forward requests to downstream services.
+
+### Proxy configuration
+
+```typescript
+const proxyOptions: Options<Request, Response> = {
+  target: serviceConfig.baseUrl,
+  changeOrigin: true,
+  xfwd: true,
+  pathRewrite: (proxyPath) => joinUpstreamPath(upstreamPath, proxyPath),
+  timeout: serviceConfig.timeout || gatewayConfig.proxyTimeoutMs,
+  proxyTimeout: serviceConfig.timeout || gatewayConfig.proxyTimeoutMs,
+  on: {
+    error: (err, req, res) => {
+      // Error handling
+    },
+    proxyReq: (proxyReq, req) => {
+      // Request modification before forwarding
+    },
+  },
+};
+```
+
+From `micros/api-gateway/src/routes/gateway.routes.ts:39`
+
+### Header forwarding
+
+The gateway forwards important headers to downstream services:
+
+```typescript
+proxyReq: (proxyReq, req) => {
+  // Forward correlation ID
+  const correlationId = req.correlationId ?? 
+    (typeof req.headers['x-correlation-id'] === 'string'
+      ? req.headers['x-correlation-id']
+      : undefined);
+
+  if (correlationId) {
+    proxyReq.setHeader('x-correlation-id', correlationId);
+    proxyReq.setHeader('x-request-id', correlationId);
+  }
+
+  // Forward authorization token if present
+  if (req.token) {
+    proxyReq.setHeader('authorization', `Bearer ${req.token}`);
+  }
+
+  // Re-stream parsed JSON body to downstream services
+  fixRequestBody(proxyReq, req);
+}
+```
+
+From `micros/api-gateway/src/routes/gateway.routes.ts:69`
+
+<Note>
+  The gateway validates JWT tokens and then forwards them to downstream services. This allows services to extract user context (user ID, role, email) from the token without re-validating the signature.
+</Note>
+
+## Middleware stack
+
+The gateway applies middleware in the following order:
+
+```typescript
+app.use(helmet());                    // Security headers
+app.use(cors(corsOptions));           // CORS handling
+app.use(express.json());              // JSON body parsing
+app.use(loggingMiddleware);           // Request logging
+app.use('/api/', limiter);            // Rate limiting
+app.use(gatewayRoutes);               // Proxy routing
+app.use(errorHandler);                // Error handling
+```
+
+From `micros/api-gateway/src/index.ts:22`
+
+### Security middleware
+
+<Tabs>
+  <Tab title="Helmet">
+    Sets secure HTTP headers:
+    - `X-Content-Type-Options: nosniff`
+    - `X-Frame-Options: DENY`
+    - `X-XSS-Protection: 0`
+    - Removes `X-Powered-By`
+    
+    Configured at `micros/api-gateway/src/index.ts:22`
+  </Tab>
+  
+  <Tab title="CORS">
+    Configures allowed origins and credentials:
+    
+    ```typescript
+    const corsOptions: CorsOptions = {
+      credentials: gatewayConfig.cors.credentials,
+      origin: (origin, callback) => {
+        if (!origin || gatewayConfig.cors.origins.includes(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(new Error('CORS origin not allowed'));
+      },
+    };
+    ```
+    
+    Allowed origins configured via `CORS_ORIGINS` environment variable.
+  </Tab>
+  
+  <Tab title="Rate Limiting">
+    Protects API from abuse:
+    
+    ```typescript
+    const limiter = rateLimit({
+      windowMs: 60000,        // 1 minute window
+      max: 1000,              // Max 1000 requests per window
+      standardHeaders: true,  // Return rate limit info
+      legacyHeaders: false,
+    });
+    app.use('/api/', limiter);
+    ```
+    
+    Configured via `.env`:
+    - `RATE_LIMIT_WINDOW_MS=60000`
+    - `RATE_LIMIT_MAX=1000`
+  </Tab>
+</Tabs>
+
+## Error handling
+
+The gateway provides standardized error responses for different failure scenarios.
+
+### Service unavailable
+
+When a downstream service is unreachable:
+
+```json
+{
+  "success": false,
+  "error": {
+    "message": "Service product-service is unavailable",
+    "code": "SERVICE_UNAVAILABLE",
+    "correlationId": "abc-123-xyz"
+  }
+}
+```
+
+HTTP Status: `502 Bad Gateway`
+
+### Route not found
+
+```json
+{
+  "success": false,
+  "error": {
+    "message": "Route not found",
+    "code": "NOT_FOUND"
+  }
+}
+```
+
+HTTP Status: `404 Not Found`
+
+### Timeout handling
+
+<Warning>
+  All service calls have a 5-second timeout. If a downstream service doesn't respond within this window, the gateway returns a 502 error. Consider implementing retry logic in client applications for transient failures.
+</Warning>
+
+## Health checks
+
+The gateway exposes multiple health endpoints:
+
+### Gateway health
+
+```bash
+GET /health
+```
+
+```json
+{
+  "status": "ok",
+  "service": "api-gateway",
+  "timestamp": "2026-03-03T10:30:00.000Z"
+}
+```
+
+### Downstream services health
+
+```bash
+GET /health/services
+```
+
+```json
+{
+  "status": "ok",
+  "services": [
+    { "name": "auth-service", "status": "healthy" },
+    { "name": "user-service", "status": "healthy" },
+    { "name": "product-service", "status": "healthy" },
+    { "name": "inventory-service", "status": "healthy" }
+  ],
+  "timestamp": "2026-03-03T10:30:00.000Z"
+}
+```
+
+Returns `503 Service Unavailable` if any service is unhealthy.
+
+## Configuration
+
+Key environment variables:
+
+```bash
+# Server
+PORT=4000
+HOST=0.0.0.0
+TRUST_PROXY=false
+
+# CORS
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+CORS_CREDENTIALS=true
+
+# Gateway behavior
+REQUIRE_AUTH=true
+GATEWAY_PROXY_TIMEOUT_MS=5000
+JWT_SECRET=CHANGE_ME_TO_A_STRONG_SECRET
+JWT_ISSUER=http://localhost:4001
+
+# Rate limit
+RATE_LIMIT_WINDOW_MS=60000
+RATE_LIMIT_MAX=1000
+
+# Downstream services
+AUTH_SERVICE_URL=http://localhost:4001
+USER_SERVICE_URL=http://localhost:8082
+PRODUCT_SERVICE_URL=http://localhost:8083
+INVENTORY_SERVICE_URL=http://localhost:8080
+```
+
+From `micros/api-gateway/.env.example`
+
+<Info>
+  In production, service URLs should point to internal DNS names or load balancers, not localhost. Example: `AUTH_SERVICE_URL=http://auth-service.internal:4001`
+</Info>
+
+## Graceful shutdown
+
+The gateway handles `SIGINT` and `SIGTERM` signals for graceful shutdown:
+
+```typescript
+shutdownSignals.forEach(signal => {
+  process.on(signal, () => {
+    console.log(`${signal} received, shutting down API Gateway...`);
+    
+    server.close(error => {
+      if (error) {
+        console.error('Error while shutting down API Gateway', error);
+        process.exit(1);
+      }
+      process.exit(0);
+    });
+    
+    setTimeout(() => {
+      console.error('Forced shutdown after timeout');
+      process.exit(1);
+    }, shutdownGracePeriodMs).unref();
+  });
+});
+```
+
+From `micros/api-gateway/src/index.ts:128`
+
+Shutdown grace period: **10 seconds**
+
+## Performance considerations
+
+<Accordion title="Why Node.js for the gateway?">
+  Node.js is an excellent choice for an API Gateway because:
+  - **Event-driven I/O**: Efficiently handles many concurrent connections
+  - **Minimal processing**: Gateway mostly forwards requests (no heavy computation)
+  - **Rich ecosystem**: Excellent HTTP proxy libraries like `http-proxy-middleware`
+  - **Low memory footprint**: Lightweight compared to JVM-based alternatives
+  - **Fast startup**: Critical for container orchestration
+</Accordion>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/concepts/authentication">
+    Learn about JWT validation in the gateway
+  </Card>
+  <Card title="Microservices" icon="cubes" href="/concepts/microservices">
+    Understand the overall service topology
+  </Card>
+</CardGroup>

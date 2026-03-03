@@ -1,0 +1,790 @@
+---
+title: Products endpoints
+description: Complete reference for all Products API endpoints with request/response examples
+---
+
+## Create product
+
+<Note>
+Requires `ADMIN` role
+</Note>
+
+Create a new product in the catalog.
+
+```http
+POST /products
+```
+
+### Request body
+
+<ParamField body="name" type="string" required>
+  Product name (max 150 characters)
+</ParamField>
+
+<ParamField body="description" type="string">
+  Product description (max 1000 characters)
+</ParamField>
+
+<ParamField body="brand" type="string" required>
+  Brand name (max 100 characters)
+</ParamField>
+
+<ParamField body="categoryId" type="integer" required>
+  ID of the category this product belongs to. Must be a positive integer.
+</ParamField>
+
+<ParamField body="price" type="number" required>
+  Product price. Must be a non-negative decimal value with up to 2 decimal places.
+</ParamField>
+
+<ParamField body="currency" type="string" required>
+  ISO 3-letter uppercase currency code (e.g., USD, EUR, GBP)
+</ParamField>
+
+<ParamField body="status" type="string" required>
+  Product status. Valid values: `ACTIVE`, `INACTIVE`, `OUT_OF_STOCK`, `DISCONTINUED`
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST "http://localhost:8083/products" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Premium Wireless Headphones",
+    "description": "High-quality noise-canceling headphones with 30-hour battery life",
+    "brand": "AudioTech",
+    "categoryId": 5,
+    "price": 199.99,
+    "currency": "USD",
+    "status": "ACTIVE"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:8083/products', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    name: 'Premium Wireless Headphones',
+    description: 'High-quality noise-canceling headphones with 30-hour battery life',
+    brand: 'AudioTech',
+    categoryId: 5,
+    price: 199.99,
+    currency: 'USD',
+    status: 'ACTIVE'
+  })
+});
+
+const product = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'http://localhost:8083/products',
+    headers={
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    },
+    json={
+        'name': 'Premium Wireless Headphones',
+        'description': 'High-quality noise-canceling headphones with 30-hour battery life',
+        'brand': 'AudioTech',
+        'categoryId': 5,
+        'price': 199.99,
+        'currency': 'USD',
+        'status': 'ACTIVE'
+    }
+)
+
+product = response.json()
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="id" type="integer">
+  Unique product identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Product name
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Product description
+</ResponseField>
+
+<ResponseField name="brand" type="string">
+  Brand name
+</ResponseField>
+
+<ResponseField name="categoryId" type="integer">
+  Category ID
+</ResponseField>
+
+<ResponseField name="price" type="number">
+  Product price
+</ResponseField>
+
+<ResponseField name="currency" type="string">
+  Currency code
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Product status
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of creation
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of last update
+</ResponseField>
+
+<ResponseField name="deleted" type="boolean">
+  Whether the product is soft-deleted
+</ResponseField>
+
+<CodeGroup>
+```json 201 Created
+{
+  "id": 123,
+  "name": "Premium Wireless Headphones",
+  "description": "High-quality noise-canceling headphones with 30-hour battery life",
+  "brand": "AudioTech",
+  "categoryId": 5,
+  "price": 199.99,
+  "currency": "USD",
+  "status": "ACTIVE",
+  "createdAt": "2026-03-03T12:00:00Z",
+  "updatedAt": "2026-03-03T12:00:00Z",
+  "deleted": false
+}
+```
+
+```json 400 Bad Request
+{
+  "timestamp": "2026-03-03T12:00:00Z",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Validation failed",
+  "path": "/products",
+  "validationErrors": {
+    "price": "Price must be non-negative",
+    "currency": "Currency must be an ISO 3-letter uppercase code"
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## List products
+
+Retrieve a paginated list of products with optional filters.
+
+```http
+GET /products
+```
+
+### Query parameters
+
+<ParamField query="categoryId" type="integer">
+  Filter products by category ID
+</ParamField>
+
+<ParamField query="brand" type="string">
+  Filter products by brand name
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by product status. Valid values: `ACTIVE`, `INACTIVE`, `OUT_OF_STOCK`, `DISCONTINUED`
+</ParamField>
+
+<ParamField query="page" type="integer" default="0">
+  Page number (zero-indexed)
+</ParamField>
+
+<ParamField query="size" type="integer" default="10">
+  Number of items per page
+</ParamField>
+
+<ParamField query="sort" type="string">
+  Sort criteria (e.g., `name,asc` or `price,desc`)
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:8083/products?categoryId=5&status=ACTIVE&page=0&size=10" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const params = new URLSearchParams({
+  categoryId: '5',
+  status: 'ACTIVE',
+  page: '0',
+  size: '10'
+});
+
+const response = await fetch(`http://localhost:8083/products?${params}`, {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'http://localhost:8083/products',
+    headers={'Authorization': f'Bearer {token}'},
+    params={
+        'categoryId': 5,
+        'status': 'ACTIVE',
+        'page': 0,
+        'size': 10
+    }
+)
+
+data = response.json()
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="content" type="array">
+  Array of product objects
+</ResponseField>
+
+<ResponseField name="page" type="integer">
+  Current page number (zero-indexed)
+</ResponseField>
+
+<ResponseField name="size" type="integer">
+  Number of items per page
+</ResponseField>
+
+<ResponseField name="totalElements" type="integer">
+  Total number of products matching the filters
+</ResponseField>
+
+<ResponseField name="totalPages" type="integer">
+  Total number of pages
+</ResponseField>
+
+<ResponseField name="last" type="boolean">
+  Whether this is the last page
+</ResponseField>
+
+<CodeGroup>
+```json 200 OK
+{
+  "content": [
+    {
+      "id": 123,
+      "name": "Premium Wireless Headphones",
+      "description": "High-quality noise-canceling headphones",
+      "brand": "AudioTech",
+      "categoryId": 5,
+      "price": 199.99,
+      "currency": "USD",
+      "status": "ACTIVE",
+      "createdAt": "2026-01-15T10:30:00Z",
+      "updatedAt": "2026-02-01T14:20:00Z",
+      "deleted": false
+    },
+    {
+      "id": 124,
+      "name": "Bluetooth Speaker",
+      "description": "Portable waterproof speaker",
+      "brand": "AudioTech",
+      "categoryId": 5,
+      "price": 79.99,
+      "currency": "USD",
+      "status": "ACTIVE",
+      "createdAt": "2026-01-20T09:15:00Z",
+      "updatedAt": "2026-01-20T09:15:00Z",
+      "deleted": false
+    }
+  ],
+  "page": 0,
+  "size": 10,
+  "totalElements": 45,
+  "totalPages": 5,
+  "last": false
+}
+```
+</CodeGroup>
+
+---
+
+## Get product by ID
+
+Retrieve detailed information about a specific product.
+
+```http
+GET /products/{productId}
+```
+
+### Path parameters
+
+<ParamField path="productId" type="integer" required>
+  The unique identifier of the product
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:8083/products/123" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:8083/products/123', {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+
+const product = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'http://localhost:8083/products/123',
+    headers={'Authorization': f'Bearer {token}'}
+)
+
+product = response.json()
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="id" type="integer">
+  Unique product identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Product name
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Product description
+</ResponseField>
+
+<ResponseField name="brand" type="string">
+  Brand name
+</ResponseField>
+
+<ResponseField name="categoryId" type="integer">
+  Category ID
+</ResponseField>
+
+<ResponseField name="price" type="number">
+  Product price
+</ResponseField>
+
+<ResponseField name="currency" type="string">
+  Currency code
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Product status
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of creation
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of last update
+</ResponseField>
+
+<ResponseField name="deleted" type="boolean">
+  Whether the product is soft-deleted
+</ResponseField>
+
+<CodeGroup>
+```json 200 OK
+{
+  "id": 123,
+  "name": "Premium Wireless Headphones",
+  "description": "High-quality noise-canceling headphones with 30-hour battery life",
+  "brand": "AudioTech",
+  "categoryId": 5,
+  "price": 199.99,
+  "currency": "USD",
+  "status": "ACTIVE",
+  "createdAt": "2026-01-15T10:30:00Z",
+  "updatedAt": "2026-02-01T14:20:00Z",
+  "deleted": false
+}
+```
+
+```json 404 Not Found
+{
+  "timestamp": "2026-03-03T12:00:00Z",
+  "status": 404,
+  "error": "Not Found",
+  "message": "Product not found with id: 999",
+  "path": "/products/999"
+}
+```
+</CodeGroup>
+
+---
+
+## Update product
+
+<Note>
+Requires `ADMIN` role
+</Note>
+
+Update an existing product's information.
+
+```http
+PUT /products/{productId}
+```
+
+### Path parameters
+
+<ParamField path="productId" type="integer" required>
+  The unique identifier of the product to update
+</ParamField>
+
+### Request body
+
+<ParamField body="name" type="string" required>
+  Product name (max 150 characters)
+</ParamField>
+
+<ParamField body="description" type="string">
+  Product description (max 1000 characters)
+</ParamField>
+
+<ParamField body="brand" type="string" required>
+  Brand name (max 100 characters)
+</ParamField>
+
+<ParamField body="categoryId" type="integer" required>
+  ID of the category this product belongs to. Must be a positive integer.
+</ParamField>
+
+<ParamField body="price" type="number" required>
+  Product price. Must be a non-negative decimal value.
+</ParamField>
+
+<ParamField body="currency" type="string" required>
+  ISO 3-letter uppercase currency code
+</ParamField>
+
+<ParamField body="status" type="string" required>
+  Product status. Valid values: `ACTIVE`, `INACTIVE`, `OUT_OF_STOCK`, `DISCONTINUED`
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X PUT "http://localhost:8083/products/123" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Premium Wireless Headphones Pro",
+    "description": "Updated model with enhanced features",
+    "brand": "AudioTech",
+    "categoryId": 5,
+    "price": 249.99,
+    "currency": "USD",
+    "status": "ACTIVE"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:8083/products/123', {
+  method: 'PUT',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    name: 'Premium Wireless Headphones Pro',
+    description: 'Updated model with enhanced features',
+    brand: 'AudioTech',
+    categoryId: 5,
+    price: 249.99,
+    currency: 'USD',
+    status: 'ACTIVE'
+  })
+});
+
+const product = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.put(
+    'http://localhost:8083/products/123',
+    headers={
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    },
+    json={
+        'name': 'Premium Wireless Headphones Pro',
+        'description': 'Updated model with enhanced features',
+        'brand': 'AudioTech',
+        'categoryId': 5,
+        'price': 249.99,
+        'currency': 'USD',
+        'status': 'ACTIVE'
+    }
+)
+
+product = response.json()
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="id" type="integer">
+  Unique product identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Updated product name
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Updated product description
+</ResponseField>
+
+<ResponseField name="brand" type="string">
+  Brand name
+</ResponseField>
+
+<ResponseField name="categoryId" type="integer">
+  Category ID
+</ResponseField>
+
+<ResponseField name="price" type="number">
+  Updated product price
+</ResponseField>
+
+<ResponseField name="currency" type="string">
+  Currency code
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Product status
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of creation
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of last update
+</ResponseField>
+
+<ResponseField name="deleted" type="boolean">
+  Whether the product is soft-deleted
+</ResponseField>
+
+<CodeGroup>
+```json 200 OK
+{
+  "id": 123,
+  "name": "Premium Wireless Headphones Pro",
+  "description": "Updated model with enhanced features",
+  "brand": "AudioTech",
+  "categoryId": 5,
+  "price": 249.99,
+  "currency": "USD",
+  "status": "ACTIVE",
+  "createdAt": "2026-01-15T10:30:00Z",
+  "updatedAt": "2026-03-03T12:30:00Z",
+  "deleted": false
+}
+```
+
+```json 404 Not Found
+{
+  "timestamp": "2026-03-03T12:30:00Z",
+  "status": 404,
+  "error": "Not Found",
+  "message": "Product not found with id: 999",
+  "path": "/products/999"
+}
+```
+</CodeGroup>
+
+---
+
+## Delete product
+
+<Note>
+Requires `ADMIN` role
+</Note>
+
+Soft delete a product. The product will be marked as deleted but not removed from the database.
+
+```http
+DELETE /products/{productId}
+```
+
+### Path parameters
+
+<ParamField path="productId" type="integer" required>
+  The unique identifier of the product to delete
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "http://localhost:8083/products/123" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:8083/products/123', {
+  method: 'DELETE',
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+
+const result = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.delete(
+    'http://localhost:8083/products/123',
+    headers={'Authorization': f'Bearer {token}'}
+)
+
+result = response.json()
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Confirmation message
+</ResponseField>
+
+<CodeGroup>
+```json 200 OK
+{
+  "message": "Product deleted successfully"
+}
+```
+
+```json 404 Not Found
+{
+  "timestamp": "2026-03-03T12:45:00Z",
+  "status": 404,
+  "error": "Not Found",
+  "message": "Product not found with id: 999",
+  "path": "/products/999"
+}
+```
+</CodeGroup>
+
+---
+
+## Search products
+
+Search for products by name or brand using a query string.
+
+```http
+GET /products/search
+```
+
+### Query parameters
+
+<ParamField query="query" type="string" required>
+  Search term to match against product names and brands
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:8083/products/search?query=wireless" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const params = new URLSearchParams({
+  query: 'wireless'
+});
+
+const response = await fetch(`http://localhost:8083/products/search?${params}`, {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+
+const products = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'http://localhost:8083/products/search',
+    headers={'Authorization': f'Bearer {token}'},
+    params={'query': 'wireless'}
+)
+
+products = response.json()
+```
+</CodeGroup>
+
+### Response
+
+Returns an array of product objects matching the search query.
+
+<CodeGroup>
+```json 200 OK
+[
+  {
+    "id": 123,
+    "name": "Premium Wireless Headphones",
+    "description": "High-quality noise-canceling headphones",
+    "brand": "AudioTech",
+    "categoryId": 5,
+    "price": 199.99,
+    "currency": "USD",
+    "status": "ACTIVE",
+    "createdAt": "2026-01-15T10:30:00Z",
+    "updatedAt": "2026-02-01T14:20:00Z",
+    "deleted": false
+  },
+  {
+    "id": 125,
+    "name": "Wireless Gaming Mouse",
+    "description": "Ergonomic wireless mouse for gaming",
+    "brand": "TechGear",
+    "categoryId": 8,
+    "price": 49.99,
+    "currency": "USD",
+    "status": "ACTIVE",
+    "createdAt": "2026-02-10T11:00:00Z",
+    "updatedAt": "2026-02-10T11:00:00Z",
+    "deleted": false
+  }
+]
+```
+</CodeGroup>
