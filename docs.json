@@ -99,7 +99,9 @@
             "group": "Products",
             "pages": [
               "api/products/overview",
-              "api/products/endpoints"
+              "api/products/endpoints",
+              "api/products/categories",
+              "api/products/variants"
             ]
           },
           {

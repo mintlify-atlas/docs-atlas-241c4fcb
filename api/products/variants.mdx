@@ -1,0 +1,293 @@
+---
+title: Product variants API
+description: Product variant management endpoints for size, color, and other variations
+---
+
+## Overview
+
+The Product Variants API allows you to manage different variations of a product (e.g., different sizes, colors, or configurations). Each variant has its own SKU, price, and stock tracking.
+
+**Base URL**: `http://localhost:8083`
+
+## Create product variant
+
+<api method="POST" url="/products/{productId}/variants" auth="ADMIN"></api>
+
+Create a new variant for a product. Requires ADMIN role.
+
+### Path parameters
+
+<ParamField path="productId" type="integer" required>
+  Product ID to add variant to
+</ParamField>
+
+### Body parameters
+
+<ParamField body="sku" type="string" required>
+  Unique SKU (Stock Keeping Unit) for this variant
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Variant name (e.g., "Large", "Blue", "128GB")
+</ParamField>
+
+<ParamField body="attributes" type="object" required>
+  Variant attributes as key-value pairs
+  <Expandable>
+    <ParamField body="size" type="string">
+      Size attribute (e.g., "S", "M", "L", "XL")
+    </ParamField>
+    <ParamField body="color" type="string">
+      Color attribute (e.g., "Red", "Blue", "Black")
+    </ParamField>
+    <ParamField body="storage" type="string">
+      Storage capacity for electronics (e.g., "64GB", "128GB")
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="price" type="number" required>
+  Price for this variant. Can differ from base product price.
+</ParamField>
+
+<ParamField body="stock" type="integer" required>
+  Initial stock quantity
+</ParamField>
+
+<ParamField body="imageUrl" type="string">
+  Optional variant-specific image URL
+</ParamField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8083/products/10/variants \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sku": "TSHIRT-BLU-L",
+    "name": "Blue - Large",
+    "attributes": {
+      "color": "Blue",
+      "size": "L"
+    },
+    "price": 29.99,
+    "stock": 50
+  }'
+```
+
+```json Response (201)
+{
+  "id": 1,
+  "productId": 10,
+  "sku": "TSHIRT-BLU-L",
+  "name": "Blue - Large",
+  "attributes": {
+    "color": "Blue",
+    "size": "L"
+  },
+  "price": 29.99,
+  "stock": 50,
+  "createdAt": "2026-03-03T10:00:00Z"
+}
+```
+
+```json Error (400)
+{
+  "message": "SKU already exists",
+  "timestamp": "2026-03-03T10:00:00Z"
+}
+```
+</CodeGroup>
+
+## List product variants
+
+<api method="GET" url="/products/{productId}/variants"></api>
+
+Get all variants for a specific product.
+
+### Path parameters
+
+<ParamField path="productId" type="integer" required>
+  Product ID
+</ParamField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl http://localhost:8083/products/10/variants
+```
+
+```json Response (200)
+[
+  {
+    "id": 1,
+    "productId": 10,
+    "sku": "TSHIRT-BLU-L",
+    "name": "Blue - Large",
+    "attributes": {
+      "color": "Blue",
+      "size": "L"
+    },
+    "price": 29.99,
+    "stock": 50
+  },
+  {
+    "id": 2,
+    "productId": 10,
+    "sku": "TSHIRT-RED-M",
+    "name": "Red - Medium",
+    "attributes": {
+      "color": "Red",
+      "size": "M"
+    },
+    "price": 29.99,
+    "stock": 35
+  }
+]
+```
+</CodeGroup>
+
+## Update product variant
+
+<api method="PUT" url="/products/{productId}/variants/{variantId}" auth="ADMIN"></api>
+
+Update an existing product variant. Requires ADMIN role.
+
+### Path parameters
+
+<ParamField path="productId" type="integer" required>
+  Product ID
+</ParamField>
+
+<ParamField path="variantId" type="integer" required>
+  Variant ID to update
+</ParamField>
+
+### Body parameters
+
+<ParamField body="name" type="string">
+  Updated variant name
+</ParamField>
+
+<ParamField body="attributes" type="object">
+  Updated variant attributes
+</ParamField>
+
+<ParamField body="price" type="number">
+  Updated price
+</ParamField>
+
+<ParamField body="stock" type="integer">
+  Updated stock quantity
+</ParamField>
+
+<ParamField body="imageUrl" type="string">
+  Updated image URL
+</ParamField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X PUT http://localhost:8083/products/10/variants/1 \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "price": 24.99,
+    "stock": 75
+  }'
+```
+
+```json Response (200)
+{
+  "id": 1,
+  "productId": 10,
+  "sku": "TSHIRT-BLU-L",
+  "name": "Blue - Large",
+  "attributes": {
+    "color": "Blue",
+    "size": "L"
+  },
+  "price": 24.99,
+  "stock": 75,
+  "updatedAt": "2026-03-03T11:00:00Z"
+}
+```
+</CodeGroup>
+
+## Delete product variant
+
+<api method="DELETE" url="/products/{productId}/variants/{variantId}" auth="ADMIN"></api>
+
+Delete a product variant. Requires ADMIN role.
+
+### Path parameters
+
+<ParamField path="productId" type="integer" required>
+  Product ID
+</ParamField>
+
+<ParamField path="variantId" type="integer" required>
+  Variant ID to delete
+</ParamField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE http://localhost:8083/products/10/variants/1 \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+```json Response (200)
+{
+  "message": "Variant deleted successfully"
+}
+```
+
+```json Error (404)
+{
+  "message": "Variant not found",
+  "timestamp": "2026-03-03T10:00:00Z"
+}
+```
+</CodeGroup>
+
+## Variant attributes
+
+Variants use flexible key-value attributes. Common attribute keys include:
+
+<AccordionGroup>
+  <Accordion title="Size attributes">
+    - `size`: Clothing sizes (XS, S, M, L, XL, XXL)
+    - `dimensions`: Physical dimensions (e.g., "10x15cm")
+    - `capacity`: Volume or capacity (e.g., "500ml", "1L")
+  </Accordion>
+  
+  <Accordion title="Color attributes">
+    - `color`: Color name (e.g., "Red", "Blue", "Black")
+    - `hexColor`: Hex color code for precise color matching (e.g., "#FF0000")
+    - `finish`: Surface finish (e.g., "Matte", "Glossy", "Metallic")
+  </Accordion>
+  
+  <Accordion title="Technical attributes">
+    - `storage`: Storage capacity for electronics (e.g., "64GB", "256GB")
+    - `memory`: RAM amount (e.g., "8GB", "16GB")
+    - `processor`: Processor type or speed
+    - `material`: Material composition (e.g., "Cotton", "Polyester", "Leather")
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Products API" icon="box" href="/api/products/endpoints">
+    Manage parent products
+  </Card>
+  <Card title="Inventory API" icon="warehouse" href="/api/inventory/endpoints">
+    Track variant stock levels
+  </Card>
+</CardGroup>

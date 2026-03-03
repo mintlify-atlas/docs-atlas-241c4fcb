@@ -1,0 +1,246 @@
+---
+title: Categories API
+description: Product category management endpoints
+---
+
+## Overview
+
+The Categories API allows you to organize products into hierarchical categories. Categories are managed by administrators and are publicly viewable by all users.
+
+**Base URL**: `http://localhost:8083`
+
+## Create category
+
+<api method="POST" url="/categories" auth="ADMIN"></api>
+
+Create a new product category. Requires ADMIN role.
+
+### Body parameters
+
+<ParamField body="name" type="string" required>
+  Category name. Must be unique.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional category description
+</ParamField>
+
+<ParamField body="slug" type="string">
+  URL-friendly identifier. Auto-generated from name if not provided.
+</ParamField>
+
+<ParamField body="parentId" type="integer">
+  Parent category ID for creating subcategories. Null for top-level categories.
+</ParamField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8083/categories \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Electronics",
+    "description": "Electronic devices and accessories",
+    "slug": "electronics"
+  }'
+```
+
+```json Response (201)
+{
+  "id": 1,
+  "name": "Electronics",
+  "description": "Electronic devices and accessories",
+  "slug": "electronics",
+  "parentId": null,
+  "createdAt": "2026-03-03T10:00:00Z",
+  "updatedAt": "2026-03-03T10:00:00Z"
+}
+```
+</CodeGroup>
+
+## List categories
+
+<api method="GET" url="/categories"></api>
+
+Get all categories. No authentication required.
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl http://localhost:8083/categories
+```
+
+```json Response (200)
+[
+  {
+    "id": 1,
+    "name": "Electronics",
+    "description": "Electronic devices and accessories",
+    "slug": "electronics",
+    "parentId": null,
+    "productCount": 25
+  },
+  {
+    "id": 2,
+    "name": "Smartphones",
+    "description": "Mobile phones and accessories",
+    "slug": "smartphones",
+    "parentId": 1,
+    "productCount": 12
+  }
+]
+```
+</CodeGroup>
+
+## Get category by ID
+
+<api method="GET" url="/categories/{categoryId}"></api>
+
+Retrieve a specific category by ID.
+
+### Path parameters
+
+<ParamField path="categoryId" type="integer" required>
+  Category ID
+</ParamField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl http://localhost:8083/categories/1
+```
+
+```json Response (200)
+{
+  "id": 1,
+  "name": "Electronics",
+  "description": "Electronic devices and accessories",
+  "slug": "electronics",
+  "parentId": null,
+  "subcategories": [
+    {
+      "id": 2,
+      "name": "Smartphones",
+      "slug": "smartphones"
+    },
+    {
+      "id": 3,
+      "name": "Laptops",
+      "slug": "laptops"
+    }
+  ],
+  "productCount": 25
+}
+```
+
+```json Error (404)
+{
+  "message": "Category not found",
+  "timestamp": "2026-03-03T10:00:00Z"
+}
+```
+</CodeGroup>
+
+## Update category
+
+<api method="PUT" url="/categories/{categoryId}" auth="ADMIN"></api>
+
+Update an existing category. Requires ADMIN role.
+
+### Path parameters
+
+<ParamField path="categoryId" type="integer" required>
+  Category ID to update
+</ParamField>
+
+### Body parameters
+
+<ParamField body="name" type="string">
+  Updated category name
+</ParamField>
+
+<ParamField body="description" type="string">
+  Updated description
+</ParamField>
+
+<ParamField body="slug" type="string">
+  Updated slug
+</ParamField>
+
+<ParamField body="parentId" type="integer">
+  Updated parent category ID
+</ParamField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X PUT http://localhost:8083/categories/1 \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Consumer Electronics",
+    "description": "Updated description"
+  }'
+```
+
+```json Response (200)
+{
+  "id": 1,
+  "name": "Consumer Electronics",
+  "description": "Updated description",
+  "slug": "electronics",
+  "parentId": null,
+  "updatedAt": "2026-03-03T11:00:00Z"
+}
+```
+</CodeGroup>
+
+## Delete category
+
+<api method="DELETE" url="/categories/{categoryId}" auth="ADMIN"></api>
+
+Delete a category. Requires ADMIN role. Cannot delete categories that have products or subcategories.
+
+### Path parameters
+
+<ParamField path="categoryId" type="integer" required>
+  Category ID to delete
+</ParamField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE http://localhost:8083/categories/1 \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+```json Response (200)
+{
+  "message": "Category deleted successfully"
+}
+```
+
+```json Error (400)
+{
+  "message": "Cannot delete category with existing products or subcategories",
+  "timestamp": "2026-03-03T10:00:00Z"
+}
+```
+</CodeGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Products API" icon="box" href="/api/products/endpoints">
+    Manage products within categories
+  </Card>
+  <Card title="Product variants" icon="layer-group" href="/api/products/variants">
+    Manage product variants
+  </Card>
+</CardGroup>
