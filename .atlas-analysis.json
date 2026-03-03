@@ -1,0 +1,125 @@
+{
+  "projectType": "saas",
+  "projectName": "QeetMart",
+  "projectDescription": "Production-grade polyglot eCommerce platform built as a monorepo with microservices architecture",
+  "theme": "palm",
+  "primaryColor": "#3B82F6",
+  "lightColor": "#60A5FA",
+  "darkColor": "#2563EB",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "architecture"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/microservices",
+              "concepts/api-gateway",
+              "concepts/authentication",
+              "concepts/data-persistence"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "services/api-gateway",
+              "services/auth-service",
+              "services/user-service",
+              "services/product-service",
+              "services/inventory-service"
+            ]
+          },
+          {
+            "group": "Frontend Applications",
+            "pages": [
+              "apps/web",
+              "apps/admin",
+              "apps/mobile"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/setup",
+              "development/local-development",
+              "development/testing",
+              "development/contracts"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/kubernetes",
+              "deployment/helm",
+              "deployment/ci-cd"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth/overview",
+              "api/auth/endpoints"
+            ]
+          },
+          {
+            "group": "Users",
+            "pages": [
+              "api/users/overview",
+              "api/users/endpoints"
+            ]
+          },
+          {
+            "group": "Products",
+            "pages": [
+              "api/products/overview",
+              "api/products/endpoints"
+            ]
+          },
+          {
+            "group": "Inventory",
+            "pages": [
+              "api/inventory/overview",
+              "api/inventory/endpoints"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Polyglot microservices architecture (Node.js, Spring Boot, Go)",
+    "API Gateway with unified routing and rate limiting",
+    "Contract-first API governance with OpenAPI",
+    "Multi-platform frontends (Next.js web, React admin, Expo mobile)",
+    "Docker Compose local development environment",
+    "Kubernetes-ready deployment with Helm charts",
+    "Comprehensive CI/CD with automated testing and validation"
+  ],
+  "publicApiSurface": [
+    "POST /api/auth/register",
+    "POST /api/auth/login",
+    "POST /api/auth/refresh",
+    "GET /api/users/:id",
+    "PUT /api/users/:id",
+    "GET /api/products",
+    "POST /api/products",
+    "GET /api/products/:id",
+    "GET /api/inventory/:productId",
+    "PUT /api/inventory/:productId"
+  ]
+}
